@@ -1,0 +1,12 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  errors:
+    # Engine must stay pure Dart; see CLAUDE.md
+    uri_does_not_exist: error
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_final_fields
+    - avoid_print

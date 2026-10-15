@@ -1,6 +1,3 @@
-import 'dart:ui';
-
-import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:ludo/ui/core/dice_timeline.dart';
 
@@ -91,10 +88,10 @@ class DicePainter extends CustomPainter {
       Paint()..color = const Color(0x33000000),
     );
     canvas.drawRRect(rrect, Paint()..color = color);
-    _sheen ??= LinearGradient(
+    _sheen ??= const LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: const [Color(0x55FFFFFF), Color(0x00FFFFFF), Color(0x22000000)],
+      colors: [Color(0x55FFFFFF), Color(0x00FFFFFF), Color(0x22000000)],
     ).createShader(rect);
     canvas.drawRRect(rrect, Paint()..shader = _sheen);
 

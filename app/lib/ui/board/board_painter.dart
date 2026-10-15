@@ -1,6 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
-
 import 'package:flutter/rendering.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/pt.dart';
@@ -40,12 +38,9 @@ class BoardPainter extends CustomPainter {
       ..shader = null
       ..color = palette.board;
     canvas.drawRRect(boardRect, fill);
-    fill.shader = RadialGradient(
+    fill.shader = const RadialGradient(
       radius: 0.85,
-      colors: [
-        const Color(0x00000000),
-        const Color(0x14000000),
-      ],
+      colors: [Color(0x00000000), Color(0x14000000)],
     ).createShader(const Rect.fromLTWH(0, 0, 15, 15));
     canvas.drawRRect(boardRect, fill);
     fill.shader = null;

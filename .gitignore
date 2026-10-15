@@ -10,3 +10,11 @@ android/key.properties
 *.keystore
 
 CLAUDE.local.md
+
+# Flutter app: Android platform files are generated in CI for now
+# (flutter create --platforms=android); commit them once customised.
+app/android/
+app/ios/
+app/.metadata
+app/README.md
+app/pubspec.lock

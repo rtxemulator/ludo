@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'milestone-*']
   pull_request:
   workflow_dispatch:
 
@@ -38,3 +38,44 @@ jobs:
 
       - name: Test
         run: dart test
+
+  app:
+    name: App (analyze + test + release APK)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform files
+        run: |
+          flutter create --platforms=android --project-name ludo_app --org dev.ludo .
+          rm -f test/widget_test.dart
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK (arm64)
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: APK size
+        run: |
+          ls -l build/app/outputs/flutter-apk/*.apk
+          echo "APK: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ludo-arm64-release
+          path: app/build/app/outputs/flutter-apk/app-release.apk

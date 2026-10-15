@@ -27,7 +27,8 @@ Specs live in docs/. Start with docs/ludo-roadmap.md.
 
 - Flutter-free math for Milestone 2 (guarded by `test/ui/core_purity_test.dart`): `board_geometry.dart` (15x15 grid, track/home/yard/finish cells, stacking), `curves.dart`, `motion_spec.dart` (every tunable number), `dice_timeline.dart`, `token_timeline.dart`, `move_plan.dart` (engine `before -> after` diff to animation plan).
 - Painters must only sample these (`pose = timeline.sample(tMs)`); never put animation numbers in widgets. Spec: `docs/ludo-animation.md`.
-- Milestone 2 steps 2b-2g (Flutter scaffold, painters, screens) are blocked on a Flutter SDK toolchain decision; Flutter is not installed in Termux.
+- Flutter app lives in `app/` (package `ludo_app`, path dep on root `ludo`). Flutter is NOT installed in Termux: it is built/tested only by the CI job `app` (APK artifact `ludo-arm64-release`). Locally you can only `dart format` app/ code; run the CI via push (branch `milestone-*`) and read it with `gh run watch` / `gh run view --log-failed`. Android platform files are generated in CI (gitignored).
+- Run root checks as before; root `dart analyze` excludes `app/`.
 
 ## Local notes
 

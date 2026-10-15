@@ -140,6 +140,8 @@ Gradient shaders are created once per size/theme change and reused (four seat co
 
 ---
 
+> **M2 implementation notes.** The Flutter app lives in `app/` (own pubspec, path dependency on the root pure-Dart `ludo` package) so `dart test` keeps working in Termux and the engine stays Flutter-free. L1 and L2 share one `TokenLayerPainter` in M2. Glow = fixed-alpha radial gradient whose *size* pulses plus a ring whose alpha pulses (paint alpha on shader paints is not relied upon). Illegal-tap nudge is deferred.
+
 ## 7. Code structure (pure Dart first)
 
 Everything that is math lives in `lib/ui/core/` with **no Flutter import**, so it is testable with plain `dart test` and the Flutter layer is only a thin painter:

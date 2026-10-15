@@ -8,3 +8,5 @@ pubspec.lock
 android/key.properties
 *.jks
 *.keystore
+
+CLAUDE.local.md

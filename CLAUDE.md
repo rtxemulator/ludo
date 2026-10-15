@@ -7,4 +7,22 @@
 - Prefer procedural CustomPainter drawing over raster image assets.
 - Create a Git commit before and after every AI-assisted code change.
 
-Specs live in docs/. Start with docs/ludo-roadmap.md (Milestone 1: engine + tests only, no UI).
+Specs live in docs/. Start with docs/ludo-roadmap.md.
+
+## Status
+
+- Milestone 1 (pure Dart engine + tests) is DONE. Next: Milestone 2 (board UI & animations). Before starting it, detail the animation curves/shaders (see "Intentionally Deferred Design Decisions" in docs/ludo-roadmap.md).
+
+## Engine notes (lib/engine/)
+
+- Public surface: `import 'package:ludo/engine/ludo_engine.dart'`. Files: `board.dart` (coordinates, safe squares), `rules_config.dart`, `game_state.dart`, `move.dart`, `dice.dart` (SplitMix64 + commit-reveal), `sha256.dart` (pure Dart, no dependency), `engine.dart`.
+- Flow: `Engine.newGame` -> `Engine.roll` (auto-passes on no legal move / triple-six forfeit; returns `RollResult` with the rolled value so the UI can animate it) -> `Engine.legalMoves` -> `Engine.apply`. `Engine.nextDecision` rolls until a choice is needed (bots/replay). `Engine.replay(seed, log)` rebuilds a game from `seed + MoveLogEntry` list.
+- `GameState` is immutable; never mutate token lists. `controlledSeat` is the seat whose tokens move (differs from `currentSeat` under teammate control). `ranking`/`winners` give team-aware results.
+- Move log records only decisions `(seat, dice, tokenIndex)`; forfeits and no-move passes are reproduced from the seed.
+- Rule decisions the spec left open: yard exit always lands on square 0; with blockades off, landing on stacked opponents captures all of them; a blockade is 2+ tokens of one seat, teammates may pass but not land on it (unless the square is safe); `exactRollToFinish: false` clamps an overshoot to finish; a roll with no legal move passes the turn even on a 6.
+- Tests: `test/engine/` (helpers in `helpers.dart`). The 10,000-game playout takes ~2.5 min on-device and has a 15 min timeout. A purity test fails if the engine imports Flutter/dart:ui/dart:io or reaches outside `lib/engine/`.
+- Before committing: `dart format --set-exit-if-changed .`, `dart analyze --fatal-infos`, `dart test`. Dart is installed in Termux via `pkg install -y dart`.
+
+## Local notes
+
+Machine-specific Git/signing/SSH instructions live in `CLAUDE.local.md` (gitignored; read it before any git commit or push).

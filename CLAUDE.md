@@ -11,7 +11,7 @@ Specs live in docs/. Start with docs/ludo-roadmap.md.
 
 ## Status
 
-- Milestone 1 (pure Dart engine + tests) is DONE. Next: Milestone 2 (board UI & animations). Before starting it, detail the animation curves/shaders (see "Intentionally Deferred Design Decisions" in docs/ludo-roadmap.md).
+- Milestone 1 (pure Dart engine + tests) is DONE. Next: Milestone 2 (board UI & animations). Animation curves/shaders are planned in docs/ludo-animation.md. Pure-Dart motion/geometry core lives in lib/ui/core/ (no Flutter imports); the Flutter layer needs an SDK toolchain decision first.
 
 ## Engine notes (lib/engine/)
 
@@ -22,6 +22,12 @@ Specs live in docs/. Start with docs/ludo-roadmap.md.
 - Rule decisions the spec left open: yard exit always lands on square 0; with blockades off, landing on stacked opponents captures all of them; a blockade is 2+ tokens of one seat, teammates may pass but not land on it (unless the square is safe); `exactRollToFinish: false` clamps an overshoot to finish; a roll with no legal move passes the turn even on a 6.
 - Tests: `test/engine/` (helpers in `helpers.dart`). The 10,000-game playout takes ~2.5 min on-device and has a 15 min timeout. A purity test fails if the engine imports Flutter/dart:ui/dart:io or reaches outside `lib/engine/`.
 - Before committing: `dart format --set-exit-if-changed .`, `dart analyze --fatal-infos`, `dart test`. Dart is installed in Termux via `pkg install -y dart`.
+
+## UI core notes (lib/ui/core/)
+
+- Flutter-free math for Milestone 2 (guarded by `test/ui/core_purity_test.dart`): `board_geometry.dart` (15x15 grid, track/home/yard/finish cells, stacking), `curves.dart`, `motion_spec.dart` (every tunable number), `dice_timeline.dart`, `token_timeline.dart`, `move_plan.dart` (engine `before -> after` diff to animation plan).
+- Painters must only sample these (`pose = timeline.sample(tMs)`); never put animation numbers in widgets. Spec: `docs/ludo-animation.md`.
+- Milestone 2 steps 2b-2g (Flutter scaffold, painters, screens) are blocked on a Flutter SDK toolchain decision; Flutter is not installed in Termux.
 
 ## Local notes
 

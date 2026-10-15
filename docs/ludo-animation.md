@@ -29,6 +29,7 @@ Related: [[ludo-blueprint]] (section 9), [[ludo-rules]], [[ludo-engine-tests]].
 Seat 0 = top-left yard, seats run clockwise (0 TL, 1 TR, 2 BR, 3 BL). Row 0 is the top.
 
 - Absolute squares `0..12` are hand-listed; `13..51` are the same cells rotated 90 degrees clockwise (`(x, y) -> (15 - y, x)` in continuous coordinates), which mirrors the engine's `+13 per seat` offset exactly.
+- The track cuts **diagonally** around the 4 inner corners of the cross (abs 4->5, 17->18, 30->31, 43->44), so those hops are 1.41 cells long; every other step is 1 cell.
 - Seat 0 start `(1,6)`; star squares (abs 8, 21, 34, 47) land on `(6,2) (12,6) (8,12) (2,8)`.
 - Home column of seat 0 = cells `(1..5, 7)`; other seats rotate it. Finish slot is in the centre 3 x 3, nudged toward the owner's arm.
 - Yard spots (seat 0): `(2,2) (4,2) (2,4) (4,4)`, rotated per seat.
@@ -84,7 +85,7 @@ The shadow stays on the ground and shrinks/fades with `lift`.
 
 - Outcome is rolled by the engine *before* the animation starts.
 - **Tumble 0 to 480 ms:** rotation `(1 - easeOutCubic(u)) * 3 turns` (ends upright); scale `1 + 0.15 sin(pi u)`.
-- **Face flicker:** 9 changes, timed by `easeOutCubic` (fast first, slowing down), faces step by +5 mod 6 so no two consecutive faces are equal, the final face is the rolled value and is never shown early.
+- **Face flicker:** 9 changes, timed by `easeOutCubic` (fast first, slowing down), every flicker face is offset 1..5 from the rolled value (so the result is never shown early) and two consecutive flickers never match.
 - **Settle 480 to 600 ms:** scale `1 + 0.06 dampedSine(s, 1.5, 4)`. Light haptic on settle.
 
 ### 4.5 Legal-move highlight

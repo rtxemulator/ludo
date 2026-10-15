@@ -46,7 +46,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
 ## 2. Intentionally Deferred Design Decisions
 
 - **AI Heuristic Weights & MCTS Tuning:** Detail before starting Milestone 4 (needs self-play on a working engine).
-- **UI Animation Curves & Shaders:** Detail before starting Milestone 2 (best evaluated interactively on device).
+- **UI Animation Curves & Shaders:** Resolved 2026-10-16 in `docs/ludo-animation.md` (values are starting points, tune on device).
 - **P2P Wire Protocol & ICE Negotiation:** Detail before starting Milestone 8.
 
 ---

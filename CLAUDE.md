@@ -30,6 +30,8 @@ Specs live in docs/. Start with docs/ludo-roadmap.md.
 - Flutter app lives in `app/` (package `ludo_app`, path dep on root `ludo`). Flutter is NOT installed in Termux: it is built/tested only by the CI job `app` (APK artifact `ludo-arm64-release`). Locally you can only `dart format` app/ code; run the CI via push (branch `milestone-*`) and read it with `gh run watch` / `gh run view --log-failed`. Android platform files are generated in CI (gitignored).
 - Run root checks as before; root `dart analyze` excludes `app/`.
 
+- Milestone 2 polish plan: docs/ludo-ui-ux.md. Rules: overhead light (no directional shadows/bevels), height = scale not Y offset, docks in the table margin, face-to-face text (upper seats rotated 180 deg by default, Fixed option). Work in 4 chats (A: P0+P1, B: P2-P4, C: P5-P7, D: P8 after the rules chat); each chat starts by reading this file and that doc, no re-planning. Status: plan written, nothing implemented yet.
+
 ## Local notes
 
 Machine-specific Git/signing/SSH instructions live in `CLAUDE.local.md` (gitignored; read it before any git commit or push).

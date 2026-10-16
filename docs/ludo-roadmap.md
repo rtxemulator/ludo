@@ -61,3 +61,9 @@ See `CLAUDE.md` in the repo root.
 
 Prompt the agent:
 > "Implement Milestone 1 from docs/ludo-roadmap.md. Write the engine and tests only, no UI."
+
+---
+
+## 5. Milestone 2 polish round
+
+Design and work plan for the post-device-test polish (haptics, 3D dice, docks, frame, token look, FX, menu, face-to-face orientation, banked-roll UI contract): `docs/ludo-ui-ux.md`. Work is split into 4 chats (section 12 of that doc).

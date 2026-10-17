@@ -232,7 +232,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 | Chat | Steps | Why a boundary here |
 |---|---|---|
 | A | P0 + P1 | Native haptics + pure-Dart core. Ends with `dart test` green and one device check (haptics). **Done**, see notes below. |
-| B | P2 + P3 + P4 | All visual layers (table, frame, tokens, docks, 3D dice). Needs the P1 core; share one device review at the end. |
+| B | P2 + P3 + P4 | All visual layers (table, frame, tokens, docks, 3D dice). Needs the P1 core; share one device review at the end. **Done**, see notes below. |
 | C | P5 + P6 + P7 | FX, menu/settings/orientation, performance pass. |
 | D | P8 | Banked-roll tray, only after the rules chat defines the engine API (section 10). |
 
@@ -247,6 +247,17 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
   - Layout: if the best margin pair is under 3 cells the board shrinks (at most 10%) to buy it (tablets); beyond that the docks go inside the yards and the menu button gets its own strip above the board. In the left/right placement the menu sits in the left margin, vertically centred.
   - `coinFlipScaleX` is the signed `cos` from section 7 (ends at -1); the painter should use `.abs()` for a symmetric disc. It is not yet part of `TokenTimeline.captured` (P5 wires it).
   - Old 2D `DiceTimeline` stays until P4 replaces the dice view.
+
+**Chat B (P2 + P3 + P4), done.** Decisions the doc left open:
+
+- Layers (bottom to top): felt (+ soft centred frame shadow), cached frame + board, yard glow, tokens, docks, two temporary round buttons. The table runs edge to edge and applies the system insets itself.
+- Yards are plain 6 x 6 rects clipped to the rounded board, so only the outer corners are round. Inactive yards get a 15% wash-out overlay (dynamic layer, so the board stays cached).
+- Wood: radial base (light mid-sides, dark corners), 10 seeded strokes per side clipped to the mitred band, mitre seams, dark outer + light inner hairline. Concentric radii (outer = 0.4 + 0.45).
+- Pawn: base ring 0.38 cell; body, dome and specular dot as in section 6; the optional emblem is not drawn yet. Shadow = core + penumbra shaders, alpha applied with a `dstIn` colour filter; drawn for all pawns before any pawn; draw order resting, victims, mover.
+- The roll finishes at the die's **settle** (920 ms), not at the end of the reveal; the reveal ring keeps playing in the dock afterwards (`rollerSeat` + `dice` stay until the next roll). Quick-roll sets the clock to the settle and skips the impact haptics (only the settle click plays).
+- Idle bob is a +-4% scale wobble (height = scale), not a Y offset. A seat with no roll yet shows a fresh die (face 1) only while it is on turn.
+- The die's dock frame is applied by turning the canvas by `turnsForEdge`; the shadow drift is computed on screen with `rotateQuarterTurns`.
+- Not done (belongs to later steps): dice dust rings (P5), toasts such as "No legal move" (P5; the old text line is gone), the illegal-tap nudge (P5), the emblem.
 
 Rules for every chat:
 - Start by reading `CLAUDE.md` and `docs/ludo-ui-ux.md` (plus `docs/ludo-animation.md` if touching motion). Do **not** re-plan.

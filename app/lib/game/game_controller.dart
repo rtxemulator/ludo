@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:ludo/engine/ludo_engine.dart';
+import 'package:ludo/ui/core/haptics.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/dice_timeline.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
 
+import '../haptics/haptics_service.dart';
 import '../ui/theme/palette.dart';
 
 /// Where the hot-seat game currently is.
@@ -22,8 +23,11 @@ class GameController extends ChangeNotifier {
     this.rules = const RulesConfig(),
     int? seed,
     double Function()? now,
-    this.haptics = true,
-  }) : _now = now ?? _stopwatchClock() {
+    bool haptics = true,
+    HapticsService? hapticsService,
+  })  : _now = now ?? _stopwatchClock(),
+        feedback = hapticsService ?? HapticsService() {
+    feedback.enabled = haptics;
     newGame(seed: seed);
   }
 
@@ -35,8 +39,11 @@ class GameController extends ChangeNotifier {
   static const BoardGeometry _geo = BoardGeometry();
 
   final RulesConfig rules;
-  final bool haptics;
   final double Function() _now;
+
+  /// Haptic feedback (native channel); `feedback.enabled` is the global
+  /// toggle.
+  final HapticsService feedback;
 
   /// Animation timings; set to [MotionSpec.reduced] for reduced motion.
   MotionSpec spec = MotionSpec.standard;
@@ -174,7 +181,13 @@ class GameController extends ChangeNotifier {
       final t = now - planStartMs;
       if (!_impactFired && t >= plan!.mover.impactMs) {
         _impactFired = true;
-        _haptic(plan!.victims.isNotEmpty);
+        feedback.play(
+          plan!.victims.isNotEmpty
+              ? HapticEvent.capture
+              : plan!.ring != null
+                  ? HapticEvent.home
+                  : HapticEvent.tokenLand,
+        );
       }
       if (t >= plan!.totalMs) {
         _finishMove();
@@ -188,7 +201,10 @@ class GameController extends ChangeNotifier {
     state = result.state;
     lastRoll = result.value;
     _refreshLayout();
-    _haptic(false);
+    feedback.play(HapticEvent.diceSettle);
+    if (result.value == 6) {
+      feedback.play(HapticEvent.six);
+    }
     if (result.outcome == RollOutcome.awaitingMove) {
       legal = Engine.legalMoves(state);
       if (legal.length == 1) {
@@ -237,21 +253,16 @@ class GameController extends ChangeNotifier {
     legal = const [];
     diceSeat = state.currentSeat;
     phase = state.isOver ? GamePhase.gameOver : GamePhase.awaitingRoll;
-    notifyListeners();
-  }
-
-  void _haptic(bool heavy) {
-    if (!haptics) {
-      return;
+    if (phase == GamePhase.gameOver) {
+      feedback.play(HapticEvent.win);
     }
-    final call =
-        heavy ? HapticFeedback.mediumImpact() : HapticFeedback.lightImpact();
-    call.catchError((Object _) {});
+    notifyListeners();
   }
 
   @override
   void dispose() {
     clock.dispose();
+    feedback.dispose();
     super.dispose();
   }
 }

@@ -4,6 +4,7 @@ import 'package:ludo/ui/core/motion_spec.dart';
 
 import '../../game/game_controller.dart';
 import '../board/board_view.dart';
+import '../dev/haptics_test_sheet.dart';
 import '../dice/dice_view.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
@@ -136,6 +137,11 @@ class _TopBar extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Haptics test',
+            icon: Icon(Icons.vibration, color: palette.text),
+            onPressed: () => showHapticsTestSheet(context, game.feedback),
           ),
           IconButton(
             tooltip: 'New game',

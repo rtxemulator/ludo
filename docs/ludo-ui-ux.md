@@ -231,10 +231,22 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 
 | Chat | Steps | Why a boundary here |
 |---|---|---|
-| A | P0 + P1 | Native haptics + pure-Dart core. Ends with `dart test` green and one device check (haptics). |
+| A | P0 + P1 | Native haptics + pure-Dart core. Ends with `dart test` green and one device check (haptics). **Done**, see notes below. |
 | B | P2 + P3 + P4 | All visual layers (table, frame, tokens, docks, 3D dice). Needs the P1 core; share one device review at the end. |
 | C | P5 + P6 + P7 | FX, menu/settings/orientation, performance pass. |
 | D | P8 | Banked-roll tray, only after the rules chat defines the engine API (section 10). |
+
+### Done notes
+
+**Chat A (P0 + P1), done.**
+
+- P0: `app/android/` committed (generated once from CI, `VIBRATE` permission added, `**/key.properties` ignored); CI now runs `flutter create` only if `android/` is missing. `MainActivity` exposes the `dev.ludo/haptics` channel (`pulse(kind, strength)`, `isAvailable`): predefined tick/click/heavy effects on API 29+ at full strength, `createOneShot` with amplitude when the strength is lower and the hardware has amplitude control, plain `vibrate(ms)` below API 26. Event table, rate limiter (>= 30 ms) and toggle are pure Dart (`lib/ui/core/haptics.dart`); controller events wired today: dice settle, six, token land, capture, home, win. Not wired yet (their moments arrive later): dice impact (P4), illegal (P5). A temporary "Haptics test" sheet (vibration icon in the top bar) plays every pattern and flips the toggle; it goes away with the settings screen (P6).
+- P1: `table_layout`, `dice3d`, `fx`, `TokenPose` change (lift = scale, uniform press) as specified; see `CLAUDE.md` for the file list. Decisions the doc left open:
+  - Dock-local frame of the 3D die: origin = dock centre, `+y` toward the player's own edge (the "hand"), `-y` toward the board. The painter rotates it per seat.
+  - The confetti burst flies radially with no gravity (a table has no "down").
+  - Layout: if the best margin pair is under 3 cells the board shrinks (at most 10%) to buy it (tablets); beyond that the docks go inside the yards and the menu button gets its own strip above the board. In the left/right placement the menu sits in the left margin, vertically centred.
+  - `coinFlipScaleX` is the signed `cos` from section 7 (ends at -1); the painter should use `.abs()` for a symmetric disc. It is not yet part of `TokenTimeline.captured` (P5 wires it).
+  - Old 2D `DiceTimeline` stays until P4 replaces the dice view.
 
 Rules for every chat:
 - Start by reading `CLAUDE.md` and `docs/ludo-ui-ux.md` (plus `docs/ludo-animation.md` if touching motion). Do **not** re-plan.

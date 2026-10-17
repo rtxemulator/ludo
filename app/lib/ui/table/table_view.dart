@@ -1,9 +1,11 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:ludo/ui/core/table_layout.dart';
 
 import '../../game/game_controller.dart';
 import '../board/board_painter.dart';
 import '../board/board_view.dart';
+import '../dev/haptics_test_sheet.dart';
+import '../dice/dock_layer.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
 import 'felt_painter.dart';
@@ -11,9 +13,10 @@ import 'felt_painter.dart';
 /// Converts a pure-Dart [Box] to a Flutter [Rect].
 Rect boxRect(Box b) => Rect.fromLTWH(b.left, b.top, b.width, b.height);
 
-/// The whole table: felt, wooden frame with the board, tokens. Everything
-/// is placed from [TableLayout] (pure Dart), so the painters never decide
-/// where things go.
+/// The whole table: felt, wooden frame with the board, tokens and the four
+/// docks. Everything is placed from [TableLayout] (pure Dart), so the
+/// painters never decide where things go. Nothing else is on screen: whose
+/// turn it is shows on the board (yard glow) and in the docks (live die).
 class TableView extends StatelessWidget {
   const TableView({
     super.key,
@@ -35,6 +38,17 @@ class TableView extends StatelessWidget {
         final height = constraints.maxHeight - inset.top - inset.bottom;
         final layout = TableLayout.compute(width: width, height: height);
         final frame = boxRect(layout.frame);
+        // Temporary second button next to the menu button (removed with the
+        // settings screen in P6): the haptics test sheet.
+        final Offset extra;
+        switch (layout.placement) {
+          case DockPlacement.topBottom:
+            extra = const Offset(0, -48);
+          case DockPlacement.leftRight:
+            extra = const Offset(0, 48);
+          case DockPlacement.inYard:
+            extra = const Offset(48, 0);
+        }
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -73,12 +87,68 @@ class TableView extends StatelessWidget {
                       shaders: shaders,
                     ),
                   ),
+                  Positioned.fill(
+                    child: DockLayer(
+                      game: game,
+                      layout: layout,
+                      palette: palette,
+                    ),
+                  ),
+                  _RoundButton(
+                    rect: boxRect(layout.menu),
+                    icon: Icons.refresh,
+                    tooltip: 'New game',
+                    color: palette.text,
+                    onPressed: game.newGame,
+                  ),
+                  _RoundButton(
+                    rect: boxRect(layout.menu).shift(extra),
+                    icon: Icons.vibration,
+                    tooltip: 'Haptics test',
+                    color: palette.text,
+                    onPressed: () =>
+                        showHapticsTestSheet(context, game.feedback),
+                  ),
                 ],
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Small round icon button on the felt.
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({
+    required this.rect,
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final Rect rect;
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fromRect(
+      rect: rect,
+      child: Material(
+        type: MaterialType.circle,
+        color: const Color(0x33000000),
+        child: IconButton(
+          tooltip: tooltip,
+          padding: EdgeInsets.zero,
+          icon: Icon(icon, color: color, size: 22),
+          onPressed: onPressed,
+        ),
+      ),
     );
   }
 }

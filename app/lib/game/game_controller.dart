@@ -2,13 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/haptics.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
-import 'package:ludo/ui/core/dice_timeline.dart';
+import 'package:ludo/ui/core/dice3d.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
 
 import '../haptics/haptics_service.dart';
-import '../ui/theme/palette.dart';
 
 /// Where the hot-seat game currently is.
 enum GamePhase { awaitingRoll, rolling, awaitingMove, moving, gameOver }
@@ -60,14 +59,33 @@ class GameController extends ChangeNotifier {
   /// Last rolled face (`null` before the first roll).
   int? lastRoll;
 
-  /// Seat whose colour the dice shows.
+  /// Seat on turn: the one whose dock holds the live die (and whose yard
+  /// glows). While a roll runs it is the roller.
   int diceSeat = 0;
 
-  /// Short hint such as "No legal move"; cleared on the next roll.
+  /// Seat that rolled the die in [dice] (differs from [diceSeat] once the
+  /// turn has passed but the reveal is still playing).
+  int rollerSeat = 0;
+
+  /// Seat that was on turn before the last change, and when it changed
+  /// (frame-clock ms). Drives the 200 ms ghost <-> live handoff of the docks.
+  int? prevActiveSeat;
+  double activeSinceMs = -1e9;
+
+  /// Short hint such as "No legal move"; cleared on the next roll. Shown by
+  /// the dock toasts (step P5).
   String? message;
 
-  DiceTimeline? dice;
+  /// The roll that is tumbling, or the last one (the painter keeps sampling
+  /// it through the reveal after the result was applied).
+  Dice3dTimeline? dice;
   double diceStartMs = 0;
+
+  /// Last roll of every seat (its ghost die); cleared on a new game.
+  final List<Dice3dTimeline?> seatDice = List.filled(seatCount, null);
+
+  /// Frame-clock time of the last out-of-turn tap on each dock.
+  final List<double> dockPulseMs = List.filled(seatCount, -1e9);
 
   MoveAnimationPlan? plan;
   double planStartMs = 0;
@@ -82,6 +100,8 @@ class GameController extends ChangeNotifier {
   RollResult? _pendingRoll;
   GameState? _after;
   bool _impactFired = false;
+  bool _diceImpactFired = false;
+  int _rollCount = 0;
 
   /// Seat whose turn it is (lights its yard); `null` once the game is over.
   int? get activeSeat => phase == GamePhase.gameOver ? null : diceSeat;
@@ -92,27 +112,6 @@ class GameController extends ChangeNotifier {
   /// die idles even while nobody is moving anything.
   bool get needsTicker => phase != GamePhase.gameOver;
 
-  /// One-line status for the top bar.
-  String get statusText {
-    switch (phase) {
-      case GamePhase.awaitingRoll:
-        return '${seatNames[state.currentSeat]}: tap the dice';
-      case GamePhase.rolling:
-        return '${seatNames[diceSeat]} is rolling...';
-      case GamePhase.awaitingMove:
-        return '${seatNames[diceSeat]}: pick a token';
-      case GamePhase.moving:
-        return '${seatNames[diceSeat]} moves';
-      case GamePhase.gameOver:
-        final ranking = state.ranking;
-        if (ranking.isEmpty || ranking.first.isEmpty) {
-          return 'Game over';
-        }
-        final names = ranking.first.map((s) => seatNames[s]).join(' & ');
-        return '$names win${ranking.first.length == 1 ? 's' : ''}!';
-    }
-  }
-
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
@@ -122,10 +121,14 @@ class GameController extends ChangeNotifier {
     lastRoll = null;
     message = null;
     dice = null;
+    seatDice.fillRange(0, seatCount, null);
+    dockPulseMs.fillRange(0, seatCount, -1e9);
     plan = null;
     _pendingRoll = null;
     _after = null;
     diceSeat = state.currentSeat;
+    prevActiveSeat = null;
+    activeSinceMs = -1e9;
     _refreshLayout();
     notifyListeners();
   }
@@ -143,11 +146,64 @@ class GameController extends ChangeNotifier {
     final result = Engine.roll(state);
     _pendingRoll = result;
     diceSeat = state.currentSeat;
-    dice = DiceTimeline(value: result.value, spec: spec);
+    rollerSeat = diceSeat;
+    // Visual-only seed: never the game's dice PRNG.
+    _rollCount++;
+    final seed = (state.turnNumber * 1000003 + _rollCount * 7919) & 0x7fffffff;
+    final timeline = Dice3dTimeline(
+      value: result.value,
+      seed: seed,
+      spec: spec,
+    );
+    dice = timeline;
     diceStartMs = _now();
+    _diceImpactFired = false;
     message = null;
     phase = GamePhase.rolling;
     notifyListeners();
+  }
+
+  /// Quick-roll: skips a running roll to its settle (the result is the same,
+  /// it only arrives sooner). Ignored outside a roll.
+  void quickRoll() {
+    if (phase != GamePhase.rolling) {
+      return;
+    }
+    // The skipped bounces are not felt either; only the settle click plays.
+    _diceImpactFired = true;
+    diceStartMs = _now() - dice!.settleMs;
+    tick();
+  }
+
+  /// A tap on seat [seat]'s dock: rolls (or quick-rolls) when it is that
+  /// seat's turn, otherwise only flashes the dock.
+  void dockTap(int seat) {
+    if (seat == activeSeat) {
+      if (phase == GamePhase.awaitingRoll) {
+        roll();
+        return;
+      }
+      if (phase == GamePhase.rolling) {
+        quickRoll();
+        return;
+      }
+    }
+    pulseDock(seat);
+  }
+
+  /// Flashes [seat]'s dock (a tap that did nothing).
+  void pulseDock(int seat) {
+    dockPulseMs[seat] = _now();
+  }
+
+  /// Makes [seat] the one on turn, starting the dock handoff.
+  void _activate(int seat) {
+    if (seat == diceSeat) {
+      return;
+    }
+    prevActiveSeat = diceSeat;
+    diceSeat = seat;
+    activeSinceMs = _now();
   }
 
   /// Handles a tap at board position [grid] (in cells). Returns whether a
@@ -177,7 +233,15 @@ class GameController extends ChangeNotifier {
     final now = _now();
     clock.value = now;
     if (phase == GamePhase.rolling) {
-      if (now - diceStartMs >= dice!.durationMs) {
+      final t = now - diceStartMs;
+      final impacts = dice!.impactsMs;
+      if (!_diceImpactFired && impacts.isNotEmpty && t >= impacts.first) {
+        // One call spans the three bounces (the pattern has the gaps).
+        _diceImpactFired = true;
+        feedback.play(HapticEvent.diceImpact);
+      }
+      // The face locks at the settle; the reveal ring plays on afterwards.
+      if (t >= dice!.settleMs) {
         _finishRoll();
       }
     } else if (phase == GamePhase.moving) {
@@ -203,6 +267,7 @@ class GameController extends ChangeNotifier {
     _pendingRoll = null;
     state = result.state;
     lastRoll = result.value;
+    seatDice[rollerSeat] = dice;
     _refreshLayout();
     feedback.play(HapticEvent.diceSettle);
     if (result.value == 6) {
@@ -219,7 +284,7 @@ class GameController extends ChangeNotifier {
       message = result.outcome == RollOutcome.tripleSixForfeit
           ? 'Three sixes: turn forfeited'
           : 'No legal move';
-      diceSeat = state.currentSeat;
+      _activate(state.currentSeat);
       phase = GamePhase.awaitingRoll;
     }
     notifyListeners();
@@ -254,7 +319,7 @@ class GameController extends ChangeNotifier {
     plan = null;
     _refreshLayout();
     legal = const [];
-    diceSeat = state.currentSeat;
+    _activate(state.currentSeat);
     phase = state.isOver ? GamePhase.gameOver : GamePhase.awaitingRoll;
     if (phase == GamePhase.gameOver) {
       feedback.play(HapticEvent.win);

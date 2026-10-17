@@ -152,7 +152,7 @@ lib/ui/core/
   curves.dart          # easing library
   motion_spec.dart     # every tunable number
   board_geometry.dart  # cells, yards, finish, stacking, resting points
-  dice_timeline.dart   # dice pose(t)
+  dice3d.dart          # 3D dice pose(t) (replaced the 2D dice_timeline.dart)
   token_timeline.dart  # hop / captured / ring pose(t)
   move_plan.dart       # state diff -> animation plan
 ```

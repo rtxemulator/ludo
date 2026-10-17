@@ -3,13 +3,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 
 import '../../game/game_controller.dart';
-import '../dev/haptics_test_sheet.dart';
-import '../dice/dice_view.dart';
-import '../theme/palette.dart';
 import '../table/table_view.dart';
+import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
 
-/// Hot-seat game screen (Milestone 2): board, status line and dice.
+/// Hot-seat game screen (Milestone 2): just the table. There is no status
+/// text; the board and the docks are the HUD.
 class GameScreen extends StatefulWidget {
   /// [controller] is injectable for tests; when omitted the screen owns one.
   const GameScreen({super.key, this.controller});
@@ -74,76 +73,15 @@ class _GameScreenState extends State<GameScreen>
     }
     return Scaffold(
       backgroundColor: palette.feltEdge,
-      body: SafeArea(
-        child: AnimatedBuilder(
-          animation: _game,
-          builder: (context, _) => Column(
-            children: [
-              _TopBar(game: _game, palette: palette),
-              Expanded(
-                child: TableView(
-                  game: _game,
-                  palette: palette,
-                  shaders: _shaders!,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DiceView(game: _game, palette: palette),
-                    SizedBox(
-                      height: 24,
-                      child: Text(
-                        _game.message ?? '',
-                        style: TextStyle(color: palette.text),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      // The table handles the system insets itself so the felt runs edge to
+      // edge.
+      body: AnimatedBuilder(
+        animation: _game,
+        builder: (context, _) => TableView(
+          game: _game,
+          palette: palette,
+          shaders: _shaders!,
         ),
-      ),
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.game, required this.palette});
-
-  final GameController game;
-  final LudoPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              game.statusText,
-              style: TextStyle(
-                color: palette.text,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Haptics test',
-            icon: Icon(Icons.vibration, color: palette.text),
-            onPressed: () => showHapticsTestSheet(context, game.feedback),
-          ),
-          IconButton(
-            tooltip: 'New game',
-            icon: Icon(Icons.refresh, color: palette.text),
-            onPressed: game.newGame,
-          ),
-        ],
       ),
     );
   }

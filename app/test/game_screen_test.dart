@@ -3,23 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ludo_app/game/game_controller.dart';
 import 'package:ludo_app/ui/board/board_view.dart';
-import 'package:ludo_app/ui/dice/dice_view.dart';
+import 'package:ludo_app/ui/dice/dock_layer.dart';
 import 'package:ludo_app/ui/screens/game_screen.dart';
 
 void main() {
-  testWidgets('screen shows board and dice and survives a few turns',
+  testWidgets('screen shows board and docks and survives a few turns',
       (tester) async {
     var t = 0.0;
     final game = GameController(seed: 42, now: () => t, haptics: false);
     await tester.pumpWidget(MaterialApp(home: GameScreen(controller: game)));
 
     expect(find.byType(BoardView), findsOneWidget);
-    expect(find.byType(DiceView), findsOneWidget);
-    expect(find.textContaining('tap the dice'), findsOneWidget);
+    expect(find.byType(DockLayer), findsOneWidget);
+    for (var seat = 0; seat < 4; seat++) {
+      expect(find.byKey(ValueKey('dock-$seat')), findsOneWidget);
+    }
+    // No status text anywhere.
+    expect(find.byType(Text), findsNothing);
 
     for (var turn = 0; turn < 12; turn++) {
       if (game.phase == GamePhase.awaitingRoll) {
-        await tester.tap(find.byType(DiceView));
+        await tester.tap(find.byKey(ValueKey('dock-${game.activeSeat}')));
       } else if (game.phase == GamePhase.awaitingMove) {
         final move = game.legal.first;
         final p = game.resting[move.owner][move.tokenIndex];

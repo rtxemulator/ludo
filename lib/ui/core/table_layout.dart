@@ -316,3 +316,21 @@ int sharedUiTurns(
     mode == UiOrientation.table && autoRotate
         ? seatTextTurns(layout, activeSeat, mode)
         : 0;
+
+/// Rotates the vector [v] clockwise on screen (y points down) by
+/// [quarterTurns] x 90 degrees: `(x, y) -> (-y, x)` per turn.
+///
+/// A dock's local frame has `+y` toward the player's own edge; rotating it
+/// by [turnsForEdge] turns that into the screen direction of the edge.
+Pt rotateQuarterTurns(Pt v, int quarterTurns) {
+  switch (((quarterTurns % 4) + 4) % 4) {
+    case 1:
+      return Pt(-v.y, v.x);
+    case 2:
+      return Pt(-v.x, -v.y);
+    case 3:
+      return Pt(v.y, -v.x);
+    default:
+      return v;
+  }
+}

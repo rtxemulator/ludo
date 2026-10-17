@@ -24,10 +24,6 @@ class MotionSpec {
     this.ringStartRadius = 0.5,
     this.ringEndRadius = 1.6,
     this.ringOpacity = 0.8,
-    this.diceTumbleMs = 480,
-    this.diceSettleMs = 120,
-    this.diceTurns = 3,
-    this.diceFlickers = 9,
     this.pulsePeriodMs = 900,
     this.pulseMinRadius = 0.62,
     this.pulseRadiusGain = 0.14,
@@ -49,6 +45,14 @@ class MotionSpec {
     this.coinFlipTurns = 1.5,
     this.confettiCount = 60,
     this.confettiMs = 3200,
+    this.dockHandoffMs = 200,
+    this.ghostOpacity = 0.45,
+    this.ghostScale = 0.8,
+    this.ghostDesaturate = 0.7,
+    this.idleBobPeriodMs = 1600,
+    this.idleBobScale = 0.04,
+    this.idleHaloOpacity = 0.28,
+    this.dockPulseMs = 300,
     this.dice3d = const Dice3dSpec(),
   });
 
@@ -89,11 +93,6 @@ class MotionSpec {
   final double ringEndRadius;
   final double ringOpacity;
 
-  final double diceTumbleMs;
-  final double diceSettleMs;
-  final int diceTurns;
-  final int diceFlickers;
-
   final double pulsePeriodMs;
   final double pulseMinRadius;
   final double pulseRadiusGain;
@@ -121,12 +120,27 @@ class MotionSpec {
   final int confettiCount;
   final double confettiMs;
 
+  /// A seat's die turns from ghost to live (or back) over this long.
+  final double dockHandoffMs;
+
+  /// Ghost die (the last result of a seat that is not on turn).
+  final double ghostOpacity;
+  final double ghostScale;
+
+  /// How much colour a ghost die loses (`0..1`).
+  final double ghostDesaturate;
+
+  /// Idle bob of the die that waits to be rolled: scale `1 +- idleBobScale`
+  /// over [idleBobPeriodMs]; the halo breathes with it.
+  final double idleBobPeriodMs;
+  final double idleBobScale;
+  final double idleHaloOpacity;
+
+  /// Dock flash when a dock is tapped out of turn.
+  final double dockPulseMs;
+
   /// Numbers of the 3D dice roll.
   final Dice3dSpec dice3d;
-
-  /// Total dice animation length.
-  double get diceTotalMs =>
-      reducedMotion ? reducedFadeMs : diceTumbleMs + diceSettleMs;
 }
 
 /// Timing and size of the 3D dice roll (docs/ludo-ui-ux.md section 4.2).

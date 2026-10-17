@@ -1,71 +1,13 @@
 import 'dart:math' as math;
 
-import 'package:ludo/ui/core/dice_timeline.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/ui/core/pulse.dart';
 import 'package:ludo/ui/core/token_timeline.dart';
 import 'package:test/test.dart';
 
 void main() {
   const spec = MotionSpec.standard;
-
-  group('DiceTimeline', () {
-    test('standard roll lasts 600 ms', () {
-      expect(DiceTimeline(value: 4).durationMs, 600);
-    });
-
-    for (var value = 1; value <= 6; value++) {
-      test('value $value: only revealed at the end of the tumble', () {
-        final dice = DiceTimeline(value: value);
-        for (var t = 0.0; t < spec.diceTumbleMs; t += 4) {
-          final pose = dice.sample(t);
-          expect(pose.face, inInclusiveRange(1, 6));
-          expect(pose.face, isNot(value), reason: 'leaked at $t ms');
-        }
-        for (var t = spec.diceTumbleMs; t <= dice.durationMs; t += 4) {
-          expect(dice.sample(t).face, value);
-        }
-        final end = dice.sample(dice.durationMs);
-        expect(end.face, value);
-        expect(end.angle, closeTo(0, 1e-9));
-        expect(end.scale, closeTo(1, 1e-9));
-      });
-    }
-
-    test('starts three turns away and spins down monotonically', () {
-      final dice = DiceTimeline(value: 3);
-      expect(dice.sample(0).angle, closeTo(3 * 2 * math.pi, 1e-9));
-      var last = double.infinity;
-      for (var t = 0.0; t <= spec.diceTumbleMs; t += 8) {
-        final a = dice.sample(t).angle;
-        expect(a, lessThanOrEqualTo(last + 1e-9));
-        last = a;
-      }
-    });
-
-    test('the face changes 9 times, never to the same face twice in a row', () {
-      final dice = DiceTimeline(value: 6);
-      var changes = 0;
-      var prev = dice.sample(0).face;
-      for (var t = 1.0; t <= spec.diceTumbleMs; t++) {
-        final f = dice.sample(t).face;
-        if (f != prev) {
-          changes++;
-          prev = f;
-        }
-      }
-      expect(changes, spec.diceFlickers);
-    });
-
-    test('reduced motion shows the result at once and fades in', () {
-      final dice = DiceTimeline(value: 5, spec: MotionSpec.reduced);
-      expect(dice.durationMs, 120);
-      expect(dice.sample(0).face, 5);
-      expect(dice.sample(0).opacity, 0);
-      expect(dice.sample(120).opacity, 1);
-      expect(dice.sample(60).angle, 0);
-    });
-  });
 
   group('PulseSample', () {
     test('stays inside its radius and opacity envelope and loops', () {

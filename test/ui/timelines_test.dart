@@ -111,8 +111,7 @@ void main() {
       final end = tl.sample(tl.durationMs);
       expect(end.pos, d);
       expect(end.lift, 0);
-      expect(end.scaleX, closeTo(1, 1e-9));
-      expect(end.scaleY, closeTo(1, 1e-9));
+      expect(end.scale, closeTo(1, 1e-9));
     });
 
     test('hop apex is 0.35 cell at mid-step and never underground', () {
@@ -133,13 +132,26 @@ void main() {
       expect(tl.sample(99999).pos, d);
     });
 
-    test('squash only happens after the last landing', () {
-      for (var t = 0.0; t < tl.impactMs; t += 5) {
-        expect(tl.sample(t).scaleY, 1);
+    test('height is scale: 1 + gain x lift, never smaller than 1 in the air',
+        () {
+      expect(tl.sample(65).scale,
+          closeTo(1 + spec.liftScaleGain * spec.hopArc, 1e-9));
+      for (var t = 0.0; t < tl.impactMs; t += 3) {
+        final pose = tl.sample(t);
+        expect(pose.scale, closeTo(1 + spec.liftScaleGain * pose.lift, 1e-9));
+        expect(pose.scale, greaterThanOrEqualTo(1));
       }
-      final squash = tl.sample(tl.impactMs + 50);
-      expect(squash.scaleY, closeTo(1 - spec.squashY, 1e-9));
-      expect(squash.scaleX, closeTo(1 + spec.squashX, 1e-9));
+    });
+
+    test('landing is a uniform press 1 -> 0.9 -> 1 after the last landing', () {
+      final mid = tl.sample(tl.impactMs + spec.landSquashMs / 2);
+      expect(mid.scale, closeTo(spec.pressScale, 1e-9));
+      expect(mid.lift, 0);
+      for (var t = tl.impactMs; t <= tl.durationMs; t += 2) {
+        expect(tl.sample(t).scale,
+            inInclusiveRange(spec.pressScale - 1e-9, 1 + 1e-9));
+      }
+      expect(tl.sample(tl.impactMs).scale, closeTo(1, 1e-9));
     });
 
     test('is a pure function: same time, same pose', () {
@@ -161,11 +173,10 @@ void main() {
       final fin = TokenTimeline.hop(path: const [a, b], toFinish: true);
       expect(fin.durationMs, 130 + 260);
       final end = fin.sample(fin.durationMs);
-      expect(end.scaleX, closeTo(spec.finishScale, 1e-9));
-      expect(end.scaleY, closeTo(spec.finishScale, 1e-9));
+      expect(end.scale, closeTo(spec.finishScale, 1e-9));
       // Overshoot below the target is allowed (easeOutBack) but bounded.
       for (var t = fin.impactMs; t <= fin.durationMs; t += 5) {
-        expect(fin.sample(t).scaleX, inInclusiveRange(0.45, 1.0));
+        expect(fin.sample(t).scale, inInclusiveRange(0.45, 1.0));
       }
     });
 
@@ -185,6 +196,9 @@ void main() {
   });
 
   group('TokenTimeline.captured', () {
+    TokenPose mid(TokenTimeline t) =>
+        t.sample(spec.captureShakeMs + spec.captureReturnMs / 2);
+
     const square = Pt(6.5, 3.5);
     const yard = Pt(2, 2);
     final tl = TokenTimeline.captured(square: square, yard: yard);
@@ -214,6 +228,13 @@ void main() {
       final end = tl.sample(tl.durationMs);
       expect(end.pos.distanceTo(yard), lessThan(1e-9));
       expect(end.lift, 0);
+      expect(end.scale, closeTo(1, 1e-9));
+    });
+
+    test('the flight is bigger in the air (scale = 1 + gain x lift)', () {
+      expect(mid(tl).scale,
+          closeTo(1 + spec.liftScaleGain * spec.captureReturnArc, 1e-9));
+      expect(tl.sample(50).scale, 1);
     });
   });
 

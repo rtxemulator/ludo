@@ -10,8 +10,8 @@ class MotionSpec {
     this.yardExitMs = 220,
     this.yardExitArc = 0.6,
     this.landSquashMs = 100,
-    this.squashY = 0.18,
-    this.squashX = 0.12,
+    this.pressScale = 0.9,
+    this.liftScaleGain = 0.5,
     this.captureShakeMs = 220,
     this.shakeAmplitude = 0.12,
     this.shakeCycles = 5,
@@ -33,6 +33,23 @@ class MotionSpec {
     this.pulseRadiusGain = 0.14,
     this.pulseMinOpacity = 0.35,
     this.pulseOpacityGain = 0.55,
+    this.dustMs = 160,
+    this.dustStartRadius = 0.5,
+    this.dustEndRadius = 0.9,
+    this.dustOpacity = 0.25,
+    this.shockwaveMs = 260,
+    this.shockwaveStartRadius = 0.4,
+    this.shockwaveEndRadius = 1.2,
+    this.shockwaveOpacity = 0.8,
+    this.sparkCount = 8,
+    this.sparkDistance = 0.9,
+    this.sparkMs = 450,
+    this.sparkSize = 0.09,
+    this.pocketGlowMs = 500,
+    this.coinFlipTurns = 1.5,
+    this.confettiCount = 60,
+    this.confettiMs = 3200,
+    this.dice3d = const Dice3dSpec(),
   });
 
   /// Starting values from the plan.
@@ -49,8 +66,14 @@ class MotionSpec {
   final double yardExitMs;
   final double yardExitArc;
   final double landSquashMs;
-  final double squashY;
-  final double squashX;
+
+  /// Uniform scale at the deepest point of a landing press (1 -> this -> 1).
+  final double pressScale;
+
+  /// A token (or die) at height `h` cells is drawn `1 + liftScaleGain * h`
+  /// times bigger: height is scale, never a Y offset (section 1 of the UI/UX
+  /// doc).
+  final double liftScaleGain;
 
   final double captureShakeMs;
   final double shakeAmplitude;
@@ -77,7 +100,107 @@ class MotionSpec {
   final double pulseMinOpacity;
   final double pulseOpacityGain;
 
+  final double dustMs;
+  final double dustStartRadius;
+  final double dustEndRadius;
+  final double dustOpacity;
+  final double shockwaveMs;
+  final double shockwaveStartRadius;
+  final double shockwaveEndRadius;
+  final double shockwaveOpacity;
+  final int sparkCount;
+  final double sparkDistance;
+  final double sparkMs;
+  final double sparkSize;
+  final double pocketGlowMs;
+
+  /// Full turns of the captured token's coin flip.
+  final double coinFlipTurns;
+
+  /// Upper bound for confetti particles (budget: <= 60).
+  final int confettiCount;
+  final double confettiMs;
+
+  /// Numbers of the 3D dice roll.
+  final Dice3dSpec dice3d;
+
   /// Total dice animation length.
   double get diceTotalMs =>
       reducedMotion ? reducedFadeMs : diceTumbleMs + diceSettleMs;
+}
+
+/// Timing and size of the 3D dice roll (docs/ludo-ui-ux.md section 4.2).
+///
+/// Times are milliseconds from the start of the roll, heights are board
+/// cells.
+class Dice3dSpec {
+  const Dice3dSpec({
+    this.popInMs = 120,
+    this.flightEndMs = 420,
+    this.bounce2EndMs = 650,
+    this.bounce3EndMs = 800,
+    this.settleEndMs = 920,
+    this.revealEndMs = 1120,
+    this.popFromScale = 0.6,
+    this.flightApex = 1.6,
+    this.bounce2Apex = 0.55,
+    this.bounce3Apex = 0.18,
+    this.liftScalePerCell = 0.45 / 1.6,
+    this.pressScale = 0.96,
+    this.pressMs = 60,
+    this.wobbleDegrees = 4,
+    this.wobbleCycles = 2,
+    this.wobbleDecay = 3,
+    this.tumbleTurnsA = 2.5,
+    this.tumbleTurnsB = 1.5,
+    this.landingJitter = 0.15,
+    this.handDistance = 1.4,
+    this.maxYawDegrees = 40,
+    this.dieCells = 1.9,
+  });
+
+  final double popInMs;
+  final double flightEndMs;
+  final double bounce2EndMs;
+  final double bounce3EndMs;
+  final double settleEndMs;
+  final double revealEndMs;
+
+  /// Scale at the first instant of the pop-in (it overshoots to 1.1, then
+  /// settles at 1).
+  final double popFromScale;
+
+  final double flightApex;
+  final double bounce2Apex;
+  final double bounce3Apex;
+
+  /// Extra scale per cell of height (+45% at the 1.6 cell apex).
+  final double liftScalePerCell;
+
+  /// Uniform press at each of the three impacts.
+  final double pressScale;
+  final double pressMs;
+
+  final double wobbleDegrees;
+  final double wobbleCycles;
+  final double wobbleDecay;
+
+  /// Base number of turns about the two tumble axes (jittered per roll).
+  final double tumbleTurnsA;
+  final double tumbleTurnsB;
+
+  /// Landing spot jitter around the dock centre (cells).
+  final double landingJitter;
+
+  /// How far outside the landing spot the die leaves the dock "hand" edge.
+  final double handDistance;
+
+  /// The final yaw (rotation about the vertical axis) is within +-this.
+  final double maxYawDegrees;
+
+  /// Die edge length in cells.
+  final double dieCells;
+
+  /// Moments the die hits the table.
+  List<double> get impactsMs => [flightEndMs, bounce2EndMs, bounce3EndMs];
 }

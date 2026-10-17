@@ -126,11 +126,10 @@ class TokenLayerPainter extends CustomPainter {
   void _drawToken(Canvas canvas, _Item item) {
     final pose = item.pose;
     final lift = pose?.lift ?? 0;
-    final sx = pose?.scaleX ?? 1;
-    final sy = pose?.scaleY ?? 1;
+    final grow = pose?.scale ?? 1;
     final opacity = pose?.opacity ?? 1;
-    final ground = Offset(item.pos.x, item.pos.y + 0.22);
-    final r = _bodyRadius * item.scale;
+    final ground = Offset(item.pos.x, item.pos.y);
+    final r = _bodyRadius * item.scale * grow;
 
     final faded = opacity < 1;
     if (faded) {
@@ -140,23 +139,23 @@ class TokenLayerPainter extends CustomPainter {
       );
     }
 
-    // Shadow stays on the ground and shrinks while the token is airborne.
+    // Shadow stays on the ground (the full pawn/parallax shadow is step P3).
     final air = (1 - lift * 0.4).clamp(0.4, 1.0);
     _shadow.color = Color.fromRGBO(0, 0, 0, 0.28 * air);
     canvas.drawOval(
       Rect.fromCenter(
         center: ground,
-        width: 0.8 * item.scale * air,
-        height: 0.28 * item.scale * air,
+        width: 0.84 * item.scale * grow * air,
+        height: 0.84 * item.scale * grow * air,
       ),
       _shadow,
     );
 
-    // Body: unit circle scaled to the radius, squash anchored at the ground.
+    // Body: unit circle scaled to the radius. Height is scale (already in
+    // `grow`), so it is not moved up the screen.
     canvas.save();
-    canvas.translate(ground.dx, ground.dy - lift);
-    canvas.scale(r * sx, r * sy);
-    canvas.translate(0, -1);
+    canvas.translate(ground.dx, ground.dy);
+    canvas.scale(r);
     _body.shader = shaders.body[item.seat];
     canvas.drawCircle(Offset.zero, 1, _body);
     canvas.drawCircle(Offset.zero, 0.92, _rim);

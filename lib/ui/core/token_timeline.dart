@@ -12,20 +12,25 @@ class TokenPose {
   const TokenPose({
     required this.pos,
     this.lift = 0,
-    this.scaleX = 1,
-    this.scaleY = 1,
+    this.scale = 1,
     this.opacity = 1,
   });
 
   /// Ground position (where the shadow is).
   final Pt pos;
 
-  /// Height above the ground, in cells (>= 0).
+  /// Height above the ground, in cells (>= 0). Drives the shadow only; the
+  /// token itself is never moved up the screen (it has no "up" at a table).
   final double lift;
-  final double scaleX;
-  final double scaleY;
+
+  /// Uniform scale of the token: height (`1 + liftScaleGain * lift`), the
+  /// landing press and the finish shrink are all folded into this one number.
+  final double scale;
   final double opacity;
 }
+
+double _heightScale(MotionSpec spec, double lift) =>
+    1 + spec.liftScaleGain * lift;
 
 /// A token animation: [sample] is pure, so it can be queried at any time in
 /// any order.
@@ -57,21 +62,23 @@ class TokenTimeline {
       if (t < hopsEnd) {
         final i = math.min(steps - 1, (t / stepMs).floor());
         final u = (t - i * stepMs) / stepMs;
+        final lift = arc(u, arcHeight);
         return TokenPose(
           pos: Pt.lerp(path[i], path[i + 1], u),
-          lift: arc(u, arcHeight),
+          lift: lift,
+          scale: _heightScale(spec, lift),
         );
       }
       final u = (t - hopsEnd) / tail;
       if (toFinish) {
         final s = 1 + (spec.finishScale - 1) * easeOutBack(u);
-        return TokenPose(pos: path.last, scaleX: s, scaleY: s);
+        return TokenPose(pos: path.last, scale: s);
       }
+      // Uniform press (1 -> pressScale -> 1), not a vertical squash.
       final bump = math.sin(math.pi * clamp01(u));
       return TokenPose(
         pos: path.last,
-        scaleX: 1 + spec.squashX * bump,
-        scaleY: 1 - spec.squashY * bump,
+        scale: 1 - (1 - spec.pressScale) * bump,
       );
     }
 
@@ -95,9 +102,11 @@ class TokenTimeline {
         return TokenPose(pos: Pt(square.x + dx, square.y));
       }
       final u = (t - spec.captureShakeMs) / spec.captureReturnMs;
+      final lift = arc(u, spec.captureReturnArc);
       return TokenPose(
         pos: Pt.lerp(square, yard, easeInOutCubic(u)),
-        lift: arc(u, spec.captureReturnArc),
+        lift: lift,
+        scale: _heightScale(spec, lift),
       );
     }
 

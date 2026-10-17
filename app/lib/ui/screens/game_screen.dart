@@ -3,10 +3,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 
 import '../../game/game_controller.dart';
-import '../board/board_view.dart';
 import '../dev/haptics_test_sheet.dart';
 import '../dice/dice_view.dart';
 import '../theme/palette.dart';
+import '../table/table_view.dart';
 import '../theme/token_shaders.dart';
 
 /// Hot-seat game screen (Milestone 2): board, status line and dice.
@@ -73,7 +73,7 @@ class _GameScreenState extends State<GameScreen>
       _shaderBrightness = brightness;
     }
     return Scaffold(
-      backgroundColor: palette.background,
+      backgroundColor: palette.feltEdge,
       body: SafeArea(
         child: AnimatedBuilder(
           animation: _game,
@@ -81,15 +81,10 @@ class _GameScreenState extends State<GameScreen>
             children: [
               _TopBar(game: _game, palette: palette),
               Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: BoardView(
-                      game: _game,
-                      palette: palette,
-                      shaders: _shaders!,
-                    ),
-                  ),
+                child: TableView(
+                  game: _game,
+                  palette: palette,
+                  shaders: _shaders!,
                 ),
               ),
               Padding(

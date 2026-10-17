@@ -83,11 +83,14 @@ class GameController extends ChangeNotifier {
   GameState? _after;
   bool _impactFired = false;
 
+  /// Seat whose turn it is (lights its yard); `null` once the game is over.
+  int? get activeSeat => phase == GamePhase.gameOver ? null : diceSeat;
+
   /// Whether the frame ticker should be running.
-  bool get needsTicker =>
-      phase == GamePhase.rolling ||
-      phase == GamePhase.moving ||
-      phase == GamePhase.awaitingMove;
+  ///
+  /// It runs whenever a turn is on: the active yard breathes and the pending
+  /// die idles even while nobody is moving anything.
+  bool get needsTicker => phase != GamePhase.gameOver;
 
   /// One-line status for the top bar.
   String get statusText {

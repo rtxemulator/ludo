@@ -2,13 +2,16 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/ui/core/table_layout.dart';
 
 import '../theme/palette.dart';
+import 'wood_frame.dart';
 
-/// Static board layer: yards, track, home columns, safe-square stars and the
-/// centre. Drawn in grid units (1 unit = 1 cell). Wrapped in a
-/// `RepaintBoundary` by the board view, so it is rasterised once per size or
-/// theme change and never during play.
+/// Static board layer: wooden frame, yards, track, home columns, safe-square
+/// stars and the centre. Drawn in grid units (1 unit = 1 cell) onto a canvas
+/// the size of the *framed* board. Wrapped in a `RepaintBoundary` by the
+/// table view, so it is rasterised once per size or theme change and never
+/// during play.
 class BoardPainter extends CustomPainter {
   BoardPainter(this.palette);
 
@@ -21,19 +24,29 @@ class BoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(size.width / BoardGeometry.gridSize);
+    canvas.scale(size.width / TableLayout.framedCells);
+    paintWoodFrame(canvas, palette);
+    canvas.translate(TableLayout.frameCells, TableLayout.frameCells);
+    _paintBoard(canvas);
+    canvas.restore();
+  }
 
+  void _paintBoard(Canvas canvas) {
     final line = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.04
       ..color = palette.cellLine;
     final fill = Paint()..style = PaintingStyle.fill;
 
-    // Board surface with a very subtle vignette.
+    // Board surface with a very subtle vignette. Everything below is clipped
+    // to the rounded board, so only the outer corners are round and the
+    // yards meet the path arms flush.
     final boardRect = RRect.fromRectAndRadius(
       const Rect.fromLTWH(0, 0, 15, 15),
-      const Radius.circular(0.4),
+      const Radius.circular(boardCornerRadius),
     );
+    canvas.save();
+    canvas.clipRRect(boardRect);
     fill
       ..shader = null
       ..color = palette.board;
@@ -45,16 +58,13 @@ class BoardPainter extends CustomPainter {
     canvas.drawRRect(boardRect, fill);
     fill.shader = null;
 
-    // Yards.
+    // Yards: plain 6 x 6 quadrants, no gap.
     for (var s = 0; s < 4; s++) {
       final a = BoardGeometry.rotate(const Pt(0, 0), s);
       final b = BoardGeometry.rotate(const Pt(6, 6), s);
       final yard = Rect.fromPoints(_o(a), _o(b));
       fill.color = palette.seat[s];
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(yard.deflate(0.05), const Radius.circular(0.5)),
-        fill,
-      );
+      canvas.drawRect(yard, fill);
       fill.color = palette.yardInner;
       canvas.drawRRect(
         RRect.fromRectAndRadius(yard.deflate(1), const Radius.circular(0.6)),

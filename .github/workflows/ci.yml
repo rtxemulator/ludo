@@ -53,19 +53,14 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android platform files
+      # app/android/ is committed (native haptics channel). Only generate it
+      # if it is ever missing.
+      - name: Generate Android platform files (if missing)
         run: |
-          flutter create --platforms=android --project-name ludo_app --org dev.ludo .
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name ludo_app --org dev.ludo .
+          fi
           rm -f test/widget_test.dart
-
-      # One-off: export the generated android/ so it can be committed
-      # (native haptics channel needs real platform files). Removed again
-      # once app/android/ is in the repo.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-platform
-          path: app/android
-          include-hidden-files: true
 
       - name: Install dependencies
         run: flutter pub get

@@ -39,7 +39,11 @@ class BoardView extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               CustomPaint(
-                painter: YardGlowPainter(game: game, palette: palette),
+                painter: YardGlowPainter(
+                  game: game,
+                  palette: palette,
+                  shaders: shaders,
+                ),
               ),
               CustomPaint(
                 painter: TokenLayerPainter(

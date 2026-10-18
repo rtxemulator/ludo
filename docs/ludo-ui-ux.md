@@ -233,7 +233,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 |---|---|---|
 | A | P0 + P1 | Native haptics + pure-Dart core. Ends with `dart test` green and one device check (haptics). **Done**, see notes below. |
 | B | P2 + P3 + P4 | All visual layers (table, frame, tokens, docks, 3D dice). Needs the P1 core; share one device review at the end. **Done**, see notes below. |
-| C | P5 + P6 + P7 | FX, menu/settings/orientation, performance pass. |
+| C | P5 + P6 + P7 | FX, menu/settings/orientation, performance pass. **Done**, see notes below (awaiting the device review). |
 | D | P8 | Banked-roll tray, only after the rules chat defines the engine API (section 10). |
 
 ### Done notes
@@ -258,6 +258,17 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 - Idle bob is a +-4% scale wobble (height = scale), not a Y offset. A seat with no roll yet shows a fresh die (face 1) only while it is on turn.
 - The die's dock frame is applied by turning the canvas by `turnsForEdge`; the shadow drift is computed on screen with `rotateQuarterTurns`.
 - Not done (belongs to later steps): dice dust rings (P5), toasts such as "No legal move" (P5; the old text line is gone), the illegal-tap nudge (P5), the emblem.
+
+**Chat C (P5 + P6 + P7), done.** Decisions the doc left open:
+
+- Effects live in an `FxScene` (`lib/ui/core/fx_scene.dart`, pure): rings, sparks, pocket glows and tap nudges carry **absolute** start times, so they outlive the `MoveAnimationPlan` that spawned them (`MoveAnimationPlan.plan(..., startMs:)` builds them, `GameController.fx` holds and prunes them each tick). The token timelines stay relative to the plan start.
+- Catalogue wiring: dust ring at every landing; yard exit = ring contracting on the yard spot at t=0 + ripple at the start square on landing; capture = shockwave on the victim square at the impact, victim shakes, flips (`TokenPose.flipX = |cos|`, min 0.04) while flying, lands with the uniform press (+100 ms in `TokenTimeline.captured`) and a dust ring at its yard spot; home = 8 sparks + pocket glow (`shaders.glow`) + the old finish ring; six halo was already P4 (`Dice3dPose.goldOpacity`); dice dust rings at each of the three impacts (skipped by quick-roll).
+- Illegal tap (`GameController.tapAt`): during a choice, a tap within 0.8 cell of a token that has no move nudges it sideways (`nudgeOffset`, 160 ms) with a faint red ring and the `illegal` haptic; while a roll is due, a board tap flashes the active dock. No-move: `noMove` haptic (new, soft tick), die shakes sideways in its dock frame, the controlled seat's tokens dim for 200 ms, and the turn glow now cross-fades from one yard to the next (`DockLook.live`) instead of jumping.
+- Toasts ("No move", "Three sixes") and game-over rank badges are **painted** (`OverlayPainter`, `TextPainter` cache), not `Text` widgets: a canvas rotation by `seatTextTurns` turns each to face its seat, and the widget test "no text on screen" still holds. Toast pill sits on the strip between the die and the player's edge; the badge is centred on the dock.
+- Confetti: `ConfettiBurst` from the board centre (<= 60 pieces, seat colours), started at game over; the ticker keeps running for `confettiMs` after game over, then `GameController.tick` notifies once so the screen stops it. Reduced motion: no confetti, badges appear at full size.
+- Menu sheet and game-over card are `TurnedBox` squares (250 ms shortest-way turn) so a quarter turn never overflows; `sharedUiTurns(layout, activeSeat | winner, mode, autoRotate)` drives them. Menu: New game, Settings, Rules (placeholder), Close. Game over: Rematch + Menu facing the winner.
+- Settings (`app/lib/settings/game_settings.dart`, in memory): haptics, reduce motion (System / On / Off), UI orientation (Table / Fixed), auto-rotate shared UI (table only), frame timing overlay. The haptics test sheet and the temporary round buttons are gone.
+- P7: `FrameTimingOverlay` (`SchedulerBinding.addTimingsCallback`, mounted only while the setting is on) shows fps, dropped/slow frames, UI/raster times, p95/worst and the game's own paint time (`PaintProbe`, 4 ms budget). CI now also builds and uploads `ludo-arm64-profile` (profile-mode APK). Static fixes for per-frame allocations: dock halos and the yard turn light reuse one unit shader per colour (alpha through a `dstIn` filter) instead of building a gradient every frame. **No on-device numbers yet**: read them with the profile APK and the overlay (checklist in the chat C hand-off).
 
 Rules for every chat:
 - Start by reading `CLAUDE.md` and `docs/ludo-ui-ux.md` (plus `docs/ludo-animation.md` if touching motion). Do **not** re-plan.

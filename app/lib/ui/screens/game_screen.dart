@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:ludo/ui/core/motion_spec.dart';
-
 import '../../game/game_controller.dart';
+import '../../settings/game_settings.dart';
 import '../table/table_view.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
@@ -11,9 +10,12 @@ import '../theme/token_shaders.dart';
 /// text; the board and the docks are the HUD.
 class GameScreen extends StatefulWidget {
   /// [controller] is injectable for tests; when omitted the screen owns one.
-  const GameScreen({super.key, this.controller});
+  const GameScreen({super.key, this.controller, this.settings});
 
   final GameController? controller;
+
+  /// Injectable for tests; when omitted the screen owns one.
+  final GameSettings? settings;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -22,6 +24,9 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
   late final GameController _game = widget.controller ?? GameController();
+  late final GameSettings _settings =
+      widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
+  bool _systemReduced = false;
   late final Ticker _ticker;
   Brightness? _shaderBrightness;
   TokenShaders? _shaders;
@@ -31,6 +36,14 @@ class _GameScreenState extends State<GameScreen>
     super.initState();
     _ticker = createTicker((_) => _game.tick());
     _game.addListener(_syncTicker);
+    _settings.addListener(_onSettings);
+    _syncTicker();
+  }
+
+  /// Pushes the settings into the controller (haptics toggle, motion spec).
+  void _onSettings() {
+    _game.feedback.enabled = _settings.haptics;
+    _game.spec = _settings.motionSpec(systemReduced: _systemReduced);
     _syncTicker();
   }
 
@@ -47,15 +60,18 @@ class _GameScreenState extends State<GameScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _game.spec = MediaQuery.disableAnimationsOf(context)
-        ? MotionSpec.reduced
-        : MotionSpec.standard;
+    _systemReduced = MediaQuery.disableAnimationsOf(context);
+    _game.spec = _settings.motionSpec(systemReduced: _systemReduced);
   }
 
   @override
   void dispose() {
     _game.removeListener(_syncTicker);
+    _settings.removeListener(_onSettings);
     _ticker.dispose();
+    if (widget.settings == null) {
+      _settings.dispose();
+    }
     if (widget.controller == null) {
       _game.dispose();
     }
@@ -76,9 +92,10 @@ class _GameScreenState extends State<GameScreen>
       // The table handles the system insets itself so the felt runs edge to
       // edge.
       body: AnimatedBuilder(
-        animation: _game,
+        animation: Listenable.merge([_game, _settings]),
         builder: (context, _) => TableView(
           game: _game,
+          settings: _settings,
           palette: palette,
           shaders: _shaders!,
         ),

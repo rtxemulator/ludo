@@ -4,11 +4,15 @@ import 'package:ludo/ui/core/table_layout.dart';
 import '../../game/game_controller.dart';
 import '../board/board_painter.dart';
 import '../board/board_view.dart';
-import '../dev/haptics_test_sheet.dart';
+import '../../settings/game_settings.dart';
+import '../dev/frame_timing_overlay.dart';
 import '../dice/dock_layer.dart';
+import '../menu/game_over_card.dart';
+import '../menu/table_menu.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
 import 'felt_painter.dart';
+import 'overlay_painter.dart';
 
 /// Converts a pure-Dart [Box] to a Flutter [Rect].
 Rect boxRect(Box b) => Rect.fromLTWH(b.left, b.top, b.width, b.height);
@@ -21,11 +25,13 @@ class TableView extends StatelessWidget {
   const TableView({
     super.key,
     required this.game,
+    required this.settings,
     required this.palette,
     required this.shaders,
   });
 
   final GameController game;
+  final GameSettings settings;
   final LudoPalette palette;
   final TokenShaders shaders;
 
@@ -38,17 +44,6 @@ class TableView extends StatelessWidget {
         final height = constraints.maxHeight - inset.top - inset.bottom;
         final layout = TableLayout.compute(width: width, height: height);
         final frame = boxRect(layout.frame);
-        // Temporary second button next to the menu button (removed with the
-        // settings screen in P6): the haptics test sheet.
-        final Offset extra;
-        switch (layout.placement) {
-          case DockPlacement.topBottom:
-            extra = const Offset(0, -48);
-          case DockPlacement.leftRight:
-            extra = const Offset(0, 48);
-          case DockPlacement.inYard:
-            extra = const Offset(48, 0);
-        }
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -94,21 +89,58 @@ class TableView extends StatelessWidget {
                       palette: palette,
                     ),
                   ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: OverlayPainter(
+                          game: game,
+                          layout: layout,
+                          palette: palette,
+                          orientation: settings.orientation,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (game.phase == GamePhase.gameOver)
+                    Positioned.fromRect(
+                      rect: Rect.fromCenter(
+                        center: Offset(
+                          layout.board.center.x,
+                          layout.board.center.y,
+                        ),
+                        width: GameOverCard.sideFor(layout),
+                        height: GameOverCard.sideFor(layout),
+                      ),
+                      child: GameOverCard(
+                        game: game,
+                        settings: settings,
+                        layout: layout,
+                        onMenu: () => showTableMenu(
+                          context,
+                          game: game,
+                          settings: settings,
+                          layout: layout,
+                        ),
+                      ),
+                    ),
                   _RoundButton(
                     rect: boxRect(layout.menu),
-                    icon: Icons.refresh,
-                    tooltip: 'New game',
+                    icon: Icons.menu,
+                    tooltip: 'Menu',
                     color: palette.text,
-                    onPressed: game.newGame,
+                    onPressed: () => showTableMenu(
+                      context,
+                      game: game,
+                      settings: settings,
+                      layout: layout,
+                    ),
                   ),
-                  _RoundButton(
-                    rect: boxRect(layout.menu).shift(extra),
-                    icon: Icons.vibration,
-                    tooltip: 'Haptics test',
-                    color: palette.text,
-                    onPressed: () =>
-                        showHapticsTestSheet(context, game.feedback),
-                  ),
+                  if (settings.frameOverlay)
+                    const Positioned(
+                      left: 4,
+                      top: 4,
+                      child: FrameTimingOverlay(),
+                    ),
                 ],
               ),
             ),

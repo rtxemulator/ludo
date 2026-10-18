@@ -3,6 +3,9 @@ import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/haptics.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/dice3d.dart';
+import 'package:ludo/ui/core/frame_stats.dart';
+import 'package:ludo/ui/core/fx.dart';
+import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
@@ -11,6 +14,15 @@ import '../haptics/haptics_service.dart';
 
 /// Where the hot-seat game currently is.
 enum GamePhase { awaitingRoll, rolling, awaitingMove, moving, gameOver }
+
+/// A short notice at a seat's dock ("No move"); the overlay paints it facing
+/// that seat.
+class DockToast {
+  const DockToast(this.text, this.startMs);
+
+  final String text;
+  final double startMs;
+}
 
 /// Hot-seat game flow on top of the engine.
 ///
@@ -72,9 +84,26 @@ class GameController extends ChangeNotifier {
   int? prevActiveSeat;
   double activeSinceMs = -1e9;
 
-  /// Short hint such as "No legal move"; cleared on the next roll. Shown by
-  /// the dock toasts (step P5).
+  /// Short hint such as "No move"; cleared on the next roll. Painted by the
+  /// dock toasts.
   String? message;
+
+  /// Toast per seat (shown for [MotionSpec.toastMs] from its start).
+  final List<DockToast?> toasts = List.filled(seatCount, null);
+
+  /// Rings, sparks, pocket glows and tap nudges that are alive now. They
+  /// outlive the move plan that spawned them.
+  final FxScene fx = FxScene();
+
+  /// Seat whose roll had no legal move and when: its tokens dim and its die
+  /// shakes (frame-clock ms).
+  int? noMoveSeat;
+  double noMoveMs = -1e9;
+
+  /// Win confetti and when the game ended (frame-clock ms).
+  ConfettiBurst? confetti;
+  double gameOverMs = -1e9;
+  bool _tickerStopNotified = false;
 
   /// The roll that is tumbling, or the last one (the painter keeps sampling
   /// it through the reveal after the result was applied).
@@ -108,9 +137,13 @@ class GameController extends ChangeNotifier {
 
   /// Whether the frame ticker should be running.
   ///
-  /// It runs whenever a turn is on: the active yard breathes and the pending
-  /// die idles even while nobody is moving anything.
-  bool get needsTicker => phase != GamePhase.gameOver;
+  /// It runs whenever a turn is on (the active yard breathes and the pending
+  /// die idles even while nobody is moving anything) and while the win
+  /// confetti flies.
+  bool get needsTicker => phase != GamePhase.gameOver || _celebrating;
+
+  bool get _celebrating =>
+      !spec.reducedMotion && _now() - gameOverMs < spec.confettiMs;
 
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
@@ -123,6 +156,13 @@ class GameController extends ChangeNotifier {
     dice = null;
     seatDice.fillRange(0, seatCount, null);
     dockPulseMs.fillRange(0, seatCount, -1e9);
+    toasts.fillRange(0, seatCount, null);
+    fx.clear();
+    noMoveSeat = null;
+    noMoveMs = -1e9;
+    confetti = null;
+    gameOverMs = -1e9;
+    _tickerStopNotified = false;
     plan = null;
     _pendingRoll = null;
     _after = null;
@@ -208,7 +248,15 @@ class GameController extends ChangeNotifier {
 
   /// Handles a tap at board position [grid] (in cells). Returns whether a
   /// token was chosen.
+  ///
+  /// While a roll is due the tap only flashes the dock of the seat on turn;
+  /// while a token is to be chosen, a tap on a token that cannot move nudges
+  /// it (with a faint red ring and a double tick).
   bool tapAt(Pt grid) {
+    if (phase == GamePhase.awaitingRoll) {
+      pulseDock(diceSeat);
+      return false;
+    }
     if (phase != GamePhase.awaitingMove) {
       return false;
     }
@@ -222,16 +270,46 @@ class GameController extends ChangeNotifier {
       }
     }
     if (best == null) {
+      _illegalTap(grid);
       return false;
     }
     _startMove(best);
     return true;
   }
 
+  /// A tap during a choice that hit a token with no move (an opponent's, or
+  /// one of the mover's own that this roll cannot move).
+  void _illegalTap(Pt grid) {
+    int? seat;
+    var index = 0;
+    var nearest = 0.8;
+    for (final s in state.activeSeats) {
+      for (var i = 0; i < tokensPerSeat; i++) {
+        final d = resting[s][i].distanceTo(grid);
+        if (d <= nearest) {
+          nearest = d;
+          seat = s;
+          index = i;
+        }
+      }
+    }
+    if (seat == null) {
+      return;
+    }
+    fx.addNudge(
+      FxNudge(seat: seat, index: index, startMs: _now()),
+      resting[seat][index],
+      spec,
+    );
+    feedback.play(HapticEvent.illegal);
+  }
+
   /// Advances time-based transitions; called every frame by the screen.
   void tick() {
     final now = _now();
+    PaintProbe.nextFrame();
     clock.value = now;
+    fx.prune(now, spec);
     if (phase == GamePhase.rolling) {
       final t = now - diceStartMs;
       final impacts = dice!.impactsMs;
@@ -259,10 +337,17 @@ class GameController extends ChangeNotifier {
       if (t >= plan!.totalMs) {
         _finishMove();
       }
+    } else if (phase == GamePhase.gameOver &&
+        !_tickerStopNotified &&
+        !needsTicker) {
+      // The confetti is over: let the screen stop the ticker.
+      _tickerStopNotified = true;
+      notifyListeners();
     }
   }
 
   void _finishRoll() {
+    final dimSeat = state.controlledSeat;
     final result = _pendingRoll!;
     _pendingRoll = null;
     state = result.state;
@@ -281,9 +366,14 @@ class GameController extends ChangeNotifier {
       }
       phase = GamePhase.awaitingMove;
     } else {
+      final now = _now();
       message = result.outcome == RollOutcome.tripleSixForfeit
-          ? 'Three sixes: turn forfeited'
-          : 'No legal move';
+          ? 'Three sixes'
+          : 'No move';
+      toasts[rollerSeat] = DockToast(message!, now);
+      noMoveSeat = dimSeat;
+      noMoveMs = now;
+      feedback.play(HapticEvent.noMove);
       _activate(state.currentSeat);
       phase = GamePhase.awaitingRoll;
     }
@@ -293,11 +383,13 @@ class GameController extends ChangeNotifier {
   void _startMove(Move move) {
     final before = state;
     final after = Engine.apply(before, move);
+    final start = _now();
     final newPlan = MoveAnimationPlan.plan(
       before: before,
       after: after,
       move: move,
       spec: spec,
+      startMs: start,
     );
     final reachedHome =
         after.tokens[move.owner][move.tokenIndex] == finishPosition;
@@ -305,8 +397,9 @@ class GameController extends ChangeNotifier {
         ? 1
         : _geo.restingScales(after)[move.owner][move.tokenIndex];
     plan = newPlan;
+    fx.addAll(newPlan.effects);
     _after = after;
-    planStartMs = _now();
+    planStartMs = start;
     _impactFired = false;
     legal = const [];
     phase = GamePhase.moving;
@@ -323,9 +416,26 @@ class GameController extends ChangeNotifier {
     phase = state.isOver ? GamePhase.gameOver : GamePhase.awaitingRoll;
     if (phase == GamePhase.gameOver) {
       feedback.play(HapticEvent.win);
+      gameOverMs = _now();
+      _tickerStopNotified = false;
+      confetti = ConfettiBurst(
+        origin: const Pt(0, 0),
+        startMs: gameOverMs,
+        seed: state.turnNumber * 31 + 7,
+        spec: spec,
+      );
     }
     notifyListeners();
   }
+
+  /// Seat of the winning player (or team's first seat); `null` before the end.
+  int? get winnerSeat {
+    final winners = state.winners;
+    return winners == null || winners.isEmpty ? null : winners.first;
+  }
+
+  /// Starts the same table again with a fresh seed (the game-over "Rematch").
+  void rematch() => newGame();
 
   @override
   void dispose() {

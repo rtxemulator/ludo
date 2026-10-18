@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
+import 'package:ludo/ui/core/frame_stats.dart';
+import 'package:ludo/ui/core/fx.dart';
+import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/ui/core/pulse.dart';
 import 'package:ludo/ui/core/token_timeline.dart';
@@ -16,7 +19,15 @@ import '../theme/token_shaders.dart';
 enum _Layer { resting, victim, mover }
 
 class _Item {
-  _Item(this.seat, this.index, this.pos, this.pose, this.scale, this.layer);
+  _Item(
+    this.seat,
+    this.index,
+    this.pos,
+    this.pose,
+    this.scale,
+    this.layer,
+    this.dim,
+  );
 
   final int seat;
   final int index;
@@ -24,6 +35,9 @@ class _Item {
   final TokenPose? pose;
   final double scale;
   final _Layer layer;
+
+  /// Opacity lost to the "no legal move" dim (`0..1`).
+  final double dim;
 }
 
 /// Dynamic layer: pawns, shadows, legal-move glow and the finish ring.
@@ -65,9 +79,11 @@ class TokenLayerPainter extends CustomPainter {
     ..color = const Color(0x1FFFFFFF);
   final Paint _glow = Paint();
   final Paint _ring = Paint()..style = PaintingStyle.stroke;
+  final Paint _spark = Paint();
 
   @override
   void paint(Canvas canvas, Size size) {
+    final probe = PaintProbe.start();
     canvas.save();
     canvas.scale(size.width / BoardGeometry.gridSize);
 
@@ -97,6 +113,12 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
 
+    _drawGlows(canvas, now);
+
+    final dimAmount = game.noMoveSeat == null
+        ? 0.0
+        : noMoveDim(now, game.noMoveMs, game.spec) * game.spec.noMoveDimAmount;
+
     // Stable seat/index order; no row sorting (a "lower row is nearer" rule
     // is wrong for the players sitting at the top).
     final items = <_Item>[];
@@ -110,13 +132,22 @@ class TokenLayerPainter extends CustomPainter {
           scale = isMover ? game.moverBaseScale : 1.0;
           layer = isMover ? _Layer.mover : _Layer.victim;
         }
+        var pos = pose?.pos ?? game.resting[seat][i];
+        if (pose == null && !game.fx.nudges.isEmpty) {
+          // A tapped token that cannot move shivers sideways.
+          pos = Pt(
+            pos.x + game.fx.nudgeOf(seat, i, now, game.spec),
+            pos.y,
+          );
+        }
         items.add(_Item(
           seat,
           i,
-          pose?.pos ?? game.resting[seat][i],
+          pos,
           pose,
           scale,
           layer,
+          seat == game.noMoveSeat && pose == null ? dimAmount : 0,
         ));
       }
     }
@@ -135,6 +166,8 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
 
+    _drawFx(canvas, now);
+
     // Finish ring.
     final ring = plan?.ring;
     if (ring != null) {
@@ -151,7 +184,80 @@ class TokenLayerPainter extends CustomPainter {
     }
 
     canvas.restore();
+    PaintProbe.stop(probe);
   }
+
+  /// Pocket glow of a token that just reached home (under the pawns).
+  void _drawGlows(Canvas canvas, double now) {
+    for (final g in game.fx.glows) {
+      final strength = g.sample(now);
+      if (strength <= 0.01) {
+        continue;
+      }
+      _glow
+        ..shader = shaders.glow[g.seat]
+        ..colorFilter = ColorFilter.mode(
+          Color.fromRGBO(0, 0, 0, strength.clamp(0.0, 1.0)),
+          BlendMode.dstIn,
+        );
+      canvas.save();
+      canvas.translate(g.center.x, g.center.y);
+      canvas.scale(1.35);
+      canvas.drawCircle(Offset.zero, 1, _glow);
+      canvas.restore();
+      _glow.colorFilter = null;
+    }
+  }
+
+  /// Rings (dust, shockwave, yard exit, ripple, nudge) and home sparks, over
+  /// the pawns.
+  void _drawFx(Canvas canvas, double now) {
+    for (final r in game.fx.rings) {
+      final s = r.ring.sample(now);
+      if (s.opacity <= 0.004) {
+        continue;
+      }
+      final Color color;
+      final double width;
+      switch (r.kind) {
+        case FxKind.dust:
+          color = palette.text;
+          width = 0.06;
+        case FxKind.shockwave:
+          color = palette.seatLight(r.seat);
+          width = 0.12;
+        case FxKind.yardExit:
+        case FxKind.ripple:
+          color = palette.seatLight(r.seat);
+          width = 0.07;
+        case FxKind.nudge:
+          color = _nudgeRed;
+          width = 0.06;
+      }
+      _ring
+        ..strokeWidth = width
+        ..color = color.withAlpha((s.opacity * 255).round().clamp(0, 255));
+      canvas.drawCircle(
+          Offset(r.ring.center.x, r.ring.center.y), s.radius, _ring);
+    }
+    for (final burst in game.fx.sparks) {
+      final sparks = burst.burst.sample(now);
+      if (sparks.isEmpty) {
+        continue;
+      }
+      final base = Color.lerp(
+        palette.seatLight(burst.seat),
+        const Color(0xFFFFFFFF),
+        0.5,
+      )!;
+      for (final sp in sparks) {
+        _spark.color = base.withAlpha((sp.opacity * 255).round().clamp(0, 255));
+        canvas.drawCircle(Offset(sp.pos.x, sp.pos.y), sp.size, _spark);
+      }
+    }
+  }
+
+  static const Color _nudgeRed = Color(0xFFE53935);
 
   /// Centred contact core + penumbra. In the air the shadow widens, fades and
   /// drifts away from the board centre (radially symmetric parallax).
@@ -163,7 +269,8 @@ class TokenLayerPainter extends CustomPainter {
     // shrink and handles height itself.
     final onGround = poseScale / (1 + game.spec.liftScaleGain * lift);
     final r = baseRadius * item.scale * onGround * (1 + shadowGrow * lift);
-    final alpha = (pose?.opacity ?? 1) / (1 + shadowFade * lift);
+    final alpha =
+        (pose?.opacity ?? 1) * (1 - item.dim) / (1 + shadowFade * lift);
     if (alpha <= 0.01 || r <= 0) {
       return;
     }
@@ -203,7 +310,7 @@ class TokenLayerPainter extends CustomPainter {
   /// specular dot at the centre and a thin symmetric rim light.
   void _drawPawn(Canvas canvas, _Item item) {
     final pose = item.pose;
-    final opacity = pose?.opacity ?? 1;
+    final opacity = (pose?.opacity ?? 1) * (1 - item.dim);
     final ground = Offset(item.pos.x, item.pos.y);
     // Height is already inside the pose scale; never a Y offset.
     final r = baseRadius * item.scale * (pose?.scale ?? 1);
@@ -218,7 +325,9 @@ class TokenLayerPainter extends CustomPainter {
 
     canvas.save();
     canvas.translate(ground.dx, ground.dy);
-    canvas.scale(r);
+    // A captured token flips like a coin: its width shrinks, its height
+    // does not.
+    canvas.scale(r * (pose?.flipX ?? 1), r);
     _fill
       ..shader = null
       ..color = palette.seatDark(item.seat);

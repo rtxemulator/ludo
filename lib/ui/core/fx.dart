@@ -371,13 +371,13 @@ double dieShakeOffset(double tMs, double startMs, MotionSpec spec) {
 }
 
 /// Pop-in scale of a game-over rank badge (overshoots, settles at 1); `0`
-/// before [startMs]. Reduced motion: appears at full size.
+/// before [startMs]. Reduced motion: always full size.
 double rankBadgeScale(double tMs, double startMs, MotionSpec spec) {
-  if (tMs < startMs) {
-    return 0;
-  }
   if (spec.reducedMotion) {
     return 1;
+  }
+  if (tMs < startMs) {
+    return 0;
   }
   return easeOutBack((tMs - startMs) / spec.rankBadgeMs);
 }

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/rendering.dart';
 import 'package:ludo/ui/core/dice3d.dart';
 import 'package:ludo/ui/core/dock_look.dart';
+import 'package:ludo/ui/core/frame_stats.dart';
+import 'package:ludo/ui/core/fx.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/ui/core/rot3.dart';
 import 'package:ludo/ui/core/table_layout.dart';
@@ -58,6 +60,7 @@ class DockPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final probe = PaintProbe.start();
     final now = game.clock.value;
     final active = game.activeSeat;
     // The seat on turn is drawn last so a tumbling die is on top.
@@ -69,6 +72,7 @@ class DockPainter extends CustomPainter {
     if (active != null) {
       _paintDock(canvas, active, now, active);
     }
+    PaintProbe.stop(probe);
   }
 
   void _paintDock(Canvas canvas, int seat, double now, int? active) {
@@ -149,8 +153,12 @@ class DockPainter extends CustomPainter {
 
     // Ground position on screen: dock centre + the dock-local offset turned
     // to this seat.
+    // A roll with no legal move makes the die shake sideways (dock-local x).
+    final shake = seat == game.rollerSeat
+        ? dieShakeOffset(now, game.noMoveMs, spec)
+        : 0.0;
     final local = rotateQuarterTurns(
-      Pt(pose.offset.x * cell, pose.offset.y * cell),
+      Pt((pose.offset.x + shake) * cell, pose.offset.y * cell),
       turns,
     );
     final ground = Offset(
@@ -230,6 +238,11 @@ class DockPainter extends CustomPainter {
     }
     canvas.restore();
 
+    // Dust ring at each impact of the tumble.
+    if (roll != null && seat == game.rollerSeat) {
+      _dust(canvas, dock, roll, turns, seat, now);
+    }
+
     // Result ring of the reveal.
     if (pose.ringOpacity > 0) {
       _stroke
@@ -241,6 +254,9 @@ class DockPainter extends CustomPainter {
     }
   }
 
+  /// Soft halo behind a die. The gradient is built once per colour on a unit
+  /// circle and reused (a new shader every frame is needless GPU churn); the
+  /// strength is applied with a `dstIn` filter.
   void _halo(
     Canvas canvas,
     Offset centre,
@@ -248,16 +264,64 @@ class DockPainter extends CustomPainter {
     Color colour,
     double strength,
   ) {
+    final shader = _haloShaders.putIfAbsent(
+      colour.toARGB32(),
+      () => RadialGradient(
+        colors: [colour, colour.withAlpha(0)],
+      ).createShader(Rect.fromCircle(center: Offset.zero, radius: 1)),
+    );
     _fill
       ..color = const Color(0xFF000000)
-      ..shader = RadialGradient(
-        colors: [
-          colour.withAlpha((strength * 255).round().clamp(0, 255)),
-          colour.withAlpha(0),
-        ],
-      ).createShader(Rect.fromCircle(center: centre, radius: radius));
-    canvas.drawCircle(centre, radius, _fill);
-    _fill.shader = null;
+      ..shader = shader
+      ..colorFilter = ColorFilter.mode(
+        Color.fromRGBO(0, 0, 0, strength.clamp(0.0, 1.0)),
+        BlendMode.dstIn,
+      );
+    canvas.save();
+    canvas.translate(centre.dx, centre.dy);
+    canvas.scale(radius);
+    canvas.drawCircle(Offset.zero, 1, _fill);
+    canvas.restore();
+    _fill
+      ..shader = null
+      ..colorFilter = null;
+  }
+
+  static final Map<int, Shader> _haloShaders = {};
+
+  /// Dust rings where the die hit the table (3 impacts, 160 ms each).
+  void _dust(
+    Canvas canvas,
+    DockLayout dock,
+    Dice3dTimeline roll,
+    int turns,
+    int seat,
+    double now,
+  ) {
+    final spec = game.spec;
+    final cell = layout.cell;
+    for (final impact in roll.impactsMs) {
+      final since = now - game.diceStartMs - impact;
+      if (since < 0 || since >= spec.dustMs) {
+        continue;
+      }
+      final ring =
+          RingFx.dust(center: Pt.zero, startMs: 0, spec: spec).sample(since);
+      if (ring.opacity <= 0.004) {
+        continue;
+      }
+      final at = roll.sample(impact).offset;
+      final local = rotateQuarterTurns(Pt(at.x * cell, at.y * cell), turns);
+      _stroke
+        ..strokeWidth = cell * 0.05
+        ..color =
+            palette.text.withAlpha((ring.opacity * 255).round().clamp(0, 255));
+      canvas.drawCircle(
+        Offset(dock.dieCenter.x + local.x, dock.dieCenter.y + local.y),
+        ring.radius * cell * 1.8,
+        _stroke,
+      );
+    }
   }
 
   /// At most three faces are turned toward the viewer; each is a rounded

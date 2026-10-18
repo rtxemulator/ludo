@@ -145,8 +145,8 @@ void main() {
     const yard = Pt(2, 2);
     final tl = TokenTimeline.captured(square: square, yard: yard);
 
-    test('shakes 220 ms then flies home 420 ms', () {
-      expect(tl.durationMs, 640);
+    test('shakes 220 ms, flies home 420 ms, lands with a 100 ms press', () {
+      expect(tl.durationMs, 740);
       expect(tl.impactMs, 0);
     });
 

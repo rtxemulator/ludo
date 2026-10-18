@@ -7,6 +7,8 @@ library;
 import 'package:ludo/engine/ludo_engine.dart';
 
 import 'board_geometry.dart';
+import 'fx.dart';
+import 'fx_scene.dart';
 import 'motion_spec.dart';
 import 'pt.dart';
 import 'token_timeline.dart';
@@ -34,16 +36,20 @@ class MoveAnimationPlan {
     required this.mover,
     required this.victims,
     required this.ring,
+    required this.effects,
     required this.totalMs,
   });
 
-  /// Plans the animation of [move] taking [before] to [after].
+  /// Plans the animation of [move] taking [before] to [after]. [startMs] is
+  /// the global time the plan starts at: the token timelines stay relative,
+  /// the [effects] carry absolute times.
   factory MoveAnimationPlan.plan({
     required GameState before,
     required GameState after,
     required Move move,
     BoardGeometry geometry = const BoardGeometry(),
     MotionSpec spec = MotionSpec.standard,
+    double startMs = 0,
   }) {
     final owner = move.owner;
     final index = move.tokenIndex;
@@ -101,6 +107,20 @@ class MoveAnimationPlan {
           )
         : null;
 
+    final effects = _effects(
+      before: before,
+      move: move,
+      geometry: geometry,
+      spec: spec,
+      startMs: startMs,
+      mover: mover,
+      victims: victims,
+      restBefore: restBefore,
+      restAfter: restAfter,
+      fromYard: from == yardPosition,
+      reachedHome: reachedHome,
+    );
+
     var total = mover.durationMs;
     for (final v in victims) {
       total = total > v.delayMs + v.timeline.durationMs
@@ -117,6 +137,7 @@ class MoveAnimationPlan {
       mover: mover,
       victims: victims,
       ring: ring,
+      effects: effects,
       totalMs: total,
     );
   }
@@ -128,6 +149,10 @@ class MoveAnimationPlan {
 
   /// Present only when the move finished a token.
   final RingBurst? ring;
+
+  /// Rings, sparks and glows this move spawns (absolute times); they live on
+  /// in the controller's scene after the plan ends.
+  final PlanEffects effects;
 
   /// When input may be unlocked again.
   final double totalMs;
@@ -145,4 +170,101 @@ class MoveAnimationPlan {
     }
     return null;
   }
+}
+
+PlanEffects _effects({
+  required GameState before,
+  required Move move,
+  required BoardGeometry geometry,
+  required MotionSpec spec,
+  required double startMs,
+  required TokenTimeline mover,
+  required List<VictimAnimation> victims,
+  required List<List<Pt>> restBefore,
+  required List<List<Pt>> restAfter,
+  required bool fromYard,
+  required bool reachedHome,
+}) {
+  final owner = move.owner;
+  final index = move.tokenIndex;
+  final impact = startMs + mover.impactMs;
+  final land = restAfter[owner][index];
+  final rings = <FxRing>[];
+  final sparks = <FxSparks>[];
+  final glows = <FxGlow>[];
+
+  if (fromYard) {
+    rings.add(
+      FxRing(
+        ring: RingFx.yardExit(
+          center: restBefore[owner][index],
+          startMs: startMs,
+          spec: spec,
+        ),
+        seat: owner,
+        kind: FxKind.yardExit,
+      ),
+    );
+  }
+
+  if (victims.isNotEmpty) {
+    for (final v in victims) {
+      rings.add(
+        FxRing(
+          ring: RingFx.shockwave(
+            center: restBefore[v.seat][v.tokenIndex],
+            startMs: startMs + v.delayMs,
+            spec: spec,
+          ),
+          seat: owner,
+          kind: FxKind.shockwave,
+        ),
+      );
+      // The victim lands in its yard with a soft ring.
+      rings.add(
+        FxRing(
+          ring: RingFx.dust(
+            center: restAfter[v.seat][v.tokenIndex],
+            startMs: startMs +
+                v.delayMs +
+                spec.captureShakeMs +
+                spec.captureReturnMs,
+            spec: spec,
+          ),
+          seat: v.seat,
+          kind: FxKind.dust,
+        ),
+      );
+    }
+  } else if (reachedHome) {
+    sparks.add(
+      FxSparks(
+        burst: SparkBurst(
+          center: land,
+          startMs: impact,
+          seed: (before.turnNumber * 7919 + owner * 4 + index) & 0x7fffffff,
+          spec: spec,
+        ),
+        seat: owner,
+      ),
+    );
+    glows.add(FxGlow(center: land, seat: owner, startMs: impact, spec: spec));
+  } else if (fromYard) {
+    rings.add(
+      FxRing(
+        ring: RingFx.ripple(center: land, startMs: impact, spec: spec),
+        seat: owner,
+        kind: FxKind.ripple,
+      ),
+    );
+  } else {
+    rings.add(
+      FxRing(
+        ring: RingFx.dust(center: land, startMs: impact, spec: spec),
+        seat: owner,
+        kind: FxKind.dust,
+      ),
+    );
+  }
+  return PlanEffects(rings: rings, sparks: sparks, glows: glows);
 }

@@ -53,6 +53,31 @@ class MotionSpec {
     this.idleBobScale = 0.04,
     this.idleHaloOpacity = 0.28,
     this.dockPulseMs = 300,
+    this.yardRingMs = 220,
+    this.yardRingStartRadius = 1.0,
+    this.yardRingEndRadius = 0.4,
+    this.yardRingOpacity = 0.7,
+    this.rippleMs = 320,
+    this.rippleStartRadius = 0.3,
+    this.rippleEndRadius = 1.1,
+    this.rippleOpacity = 0.6,
+    this.nudgeMs = 160,
+    this.nudgeAmplitude = 0.07,
+    this.nudgeCycles = 2,
+    this.nudgeDecay = 3,
+    this.nudgeRingMs = 260,
+    this.nudgeRingStartRadius = 0.45,
+    this.nudgeRingEndRadius = 0.8,
+    this.nudgeRingOpacity = 0.55,
+    this.noMoveDimMs = 200,
+    this.noMoveDimAmount = 0.5,
+    this.dieShakeMs = 300,
+    this.dieShakeAmplitude = 0.12,
+    this.dieShakeCycles = 3,
+    this.dieShakeDecay = 3,
+    this.toastMs = 1200,
+    this.toastFadeMs = 180,
+    this.rankBadgeMs = 450,
     this.dice3d = const Dice3dSpec(),
   });
 
@@ -138,6 +163,44 @@ class MotionSpec {
 
   /// Dock flash when a dock is tapped out of turn.
   final double dockPulseMs;
+
+  /// Yard-exit ring that contracts onto the yard spot as the token rises, and
+  /// the ripple at the start square when it lands.
+  final double yardRingMs;
+  final double yardRingStartRadius;
+  final double yardRingEndRadius;
+  final double yardRingOpacity;
+  final double rippleMs;
+  final double rippleStartRadius;
+  final double rippleEndRadius;
+  final double rippleOpacity;
+
+  /// Illegal-move nudge: `nudgeAmplitude x dampedSine(nudgeCycles)` sideways
+  /// over [nudgeMs] and a faint red ring.
+  final double nudgeMs;
+  final double nudgeAmplitude;
+  final double nudgeCycles;
+  final double nudgeDecay;
+  final double nudgeRingMs;
+  final double nudgeRingStartRadius;
+  final double nudgeRingEndRadius;
+  final double nudgeRingOpacity;
+
+  /// "No legal move": the roller's tokens dim for [noMoveDimMs] (by up to
+  /// [noMoveDimAmount] of their opacity) and the die shakes.
+  final double noMoveDimMs;
+  final double noMoveDimAmount;
+  final double dieShakeMs;
+  final double dieShakeAmplitude;
+  final double dieShakeCycles;
+  final double dieShakeDecay;
+
+  /// Toast pill at a dock: total life and the fade at each end.
+  final double toastMs;
+  final double toastFadeMs;
+
+  /// Game-over rank badge pop-in.
+  final double rankBadgeMs;
 
   /// Numbers of the 3D dice roll.
   final Dice3dSpec dice3d;

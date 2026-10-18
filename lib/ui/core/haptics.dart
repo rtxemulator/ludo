@@ -30,6 +30,7 @@ enum HapticEvent {
   capture,
   home,
   illegal,
+  noMove,
   six,
   win,
 }
@@ -62,6 +63,7 @@ const Map<HapticEvent, List<HapticPulse>> hapticPatterns = {
     HapticPulse(HapticKind.tick, 0.7),
     HapticPulse(HapticKind.tick, 0.7, afterMs: 72),
   ],
+  HapticEvent.noMove: [HapticPulse(HapticKind.tick, 0.4)],
   // Follows the settle click of the same roll.
   HapticEvent.six: [HapticPulse(HapticKind.click, 0.7, afterMs: 80)],
   HapticEvent.win: [

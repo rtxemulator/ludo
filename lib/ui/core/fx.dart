@@ -57,6 +57,54 @@ class RingFx {
         visible: !spec.reducedMotion,
       );
 
+  /// Ring that contracts onto the yard spot while a token leaves the yard.
+  factory RingFx.yardExit({
+    required Pt center,
+    required double startMs,
+    MotionSpec spec = MotionSpec.standard,
+  }) =>
+      RingFx(
+        center: center,
+        startMs: startMs,
+        durationMs: spec.yardRingMs,
+        startRadius: spec.yardRingStartRadius,
+        endRadius: spec.yardRingEndRadius,
+        startOpacity: spec.yardRingOpacity,
+        visible: !spec.reducedMotion,
+      );
+
+  /// Ripple at the start square when a token lands there from the yard.
+  factory RingFx.ripple({
+    required Pt center,
+    required double startMs,
+    MotionSpec spec = MotionSpec.standard,
+  }) =>
+      RingFx(
+        center: center,
+        startMs: startMs,
+        durationMs: spec.rippleMs,
+        startRadius: spec.rippleStartRadius,
+        endRadius: spec.rippleEndRadius,
+        startOpacity: spec.rippleOpacity,
+        visible: !spec.reducedMotion,
+      );
+
+  /// Faint ring around a token that was tapped but cannot move.
+  factory RingFx.nudge({
+    required Pt center,
+    required double startMs,
+    MotionSpec spec = MotionSpec.standard,
+  }) =>
+      RingFx(
+        center: center,
+        startMs: startMs,
+        durationMs: spec.nudgeRingMs,
+        startRadius: spec.nudgeRingStartRadius,
+        endRadius: spec.nudgeRingEndRadius,
+        startOpacity: spec.nudgeRingOpacity,
+        visible: !spec.reducedMotion,
+      );
+
   final Pt center;
   final double startMs;
   final double durationMs;
@@ -268,4 +316,68 @@ class _Particle {
   final double phase;
   final double size;
   final double delayMs;
+}
+
+/// Sideways offset (cells) of a token that was tapped but cannot move:
+/// `nudgeAmplitude x dampedSine(nudgeCycles)` over [MotionSpec.nudgeMs]; `0`
+/// before, after and in reduced motion.
+double nudgeOffset(double tMs, double startMs, MotionSpec spec) {
+  final u = (tMs - startMs) / spec.nudgeMs;
+  if (spec.reducedMotion || u < 0 || u >= 1) {
+    return 0;
+  }
+  return spec.nudgeAmplitude *
+      dampedSine(u, cycles: spec.nudgeCycles, decay: spec.nudgeDecay);
+}
+
+/// How far the tokens of a seat with no legal move are dimmed: a `0..1..0`
+/// bump over [MotionSpec.noMoveDimMs] (`0` outside it). Multiply by
+/// [MotionSpec.noMoveDimAmount] for the opacity loss.
+double noMoveDim(double tMs, double startMs, MotionSpec spec) {
+  final u = (tMs - startMs) / spec.noMoveDimMs;
+  if (spec.reducedMotion || u < 0 || u >= 1) {
+    return 0;
+  }
+  return math.sin(math.pi * u);
+}
+
+/// Dock-local sideways offset (cells) of the die that shakes because its
+/// roll had no legal move; `0` outside [MotionSpec.dieShakeMs] and in
+/// reduced motion.
+double dieShakeOffset(double tMs, double startMs, MotionSpec spec) {
+  final u = (tMs - startMs) / spec.dieShakeMs;
+  if (spec.reducedMotion || u < 0 || u >= 1) {
+    return 0;
+  }
+  return spec.dieShakeAmplitude *
+      dampedSine(u, cycles: spec.dieShakeCycles, decay: spec.dieShakeDecay);
+}
+
+/// Look of a toast pill [startMs]..`+toastMs`: fades in and out over
+/// [MotionSpec.toastFadeMs] and pops in slightly (reduced motion: fade only).
+({double opacity, double scale}) toastLook(
+  double tMs,
+  double startMs,
+  MotionSpec spec,
+) {
+  final t = tMs - startMs;
+  if (t < 0 || t >= spec.toastMs) {
+    return (opacity: 0, scale: 1);
+  }
+  final fadeIn = clamp01(t / spec.toastFadeMs);
+  final fadeOut = clamp01((spec.toastMs - t) / spec.toastFadeMs);
+  final scale = spec.reducedMotion ? 1.0 : 0.85 + 0.15 * easeOutBack(fadeIn);
+  return (opacity: math.min(fadeIn, fadeOut), scale: scale);
+}
+
+/// Pop-in scale of a game-over rank badge (overshoots, settles at 1); `0`
+/// before [startMs]. Reduced motion: appears at full size.
+double rankBadgeScale(double tMs, double startMs, MotionSpec spec) {
+  if (tMs < startMs) {
+    return 0;
+  }
+  if (spec.reducedMotion) {
+    return 1;
+  }
+  return easeOutBack((tMs - startMs) / spec.rankBadgeMs);
 }

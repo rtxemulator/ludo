@@ -4,6 +4,7 @@ library;
 import 'dart:math' as math;
 
 import 'curves.dart';
+import 'fx.dart' show coinFlipScaleX;
 import 'motion_spec.dart';
 import 'pt.dart';
 
@@ -14,6 +15,7 @@ class TokenPose {
     this.lift = 0,
     this.scale = 1,
     this.opacity = 1,
+    this.flipX = 1,
   });
 
   /// Ground position (where the shadow is).
@@ -27,6 +29,11 @@ class TokenPose {
   /// landing press and the finish shrink are all folded into this one number.
   final double scale;
   final double opacity;
+
+  /// Apparent width factor `0..1` of the token: a captured token flips like
+  /// a coin on its way home (the painter squeezes the disc horizontally).
+  /// `1` for every other pose.
+  final double flipX;
 }
 
 double _heightScale(MotionSpec spec, double lift) =>
@@ -94,6 +101,7 @@ class TokenTimeline {
     if (spec.reducedMotion) {
       return TokenTimeline.jump(from: square, to: yard, spec: spec);
     }
+    final flightEnd = spec.captureShakeMs + spec.captureReturnMs;
     TokenPose sample(double t) {
       if (t < spec.captureShakeMs) {
         final u = t / spec.captureShakeMs;
@@ -101,20 +109,27 @@ class TokenTimeline {
             dampedSine(u, cycles: spec.shakeCycles, decay: spec.shakeDecay);
         return TokenPose(pos: Pt(square.x + dx, square.y));
       }
-      final u = (t - spec.captureShakeMs) / spec.captureReturnMs;
-      final lift = arc(u, spec.captureReturnArc);
+      if (t < flightEnd) {
+        final u = (t - spec.captureShakeMs) / spec.captureReturnMs;
+        final lift = arc(u, spec.captureReturnArc);
+        return TokenPose(
+          pos: Pt.lerp(square, yard, easeInOutCubic(u)),
+          lift: lift,
+          scale: _heightScale(spec, lift),
+          // Never exactly 0: a zero-width disc is a singular matrix.
+          flipX: math.max(0.04, coinFlipScaleX(u, spec).abs()),
+        );
+      }
+      // Lands in the yard with the same uniform press as any landing.
+      final u = (t - flightEnd) / spec.landSquashMs;
+      final bump = math.sin(math.pi * clamp01(u));
       return TokenPose(
-        pos: Pt.lerp(square, yard, easeInOutCubic(u)),
-        lift: lift,
-        scale: _heightScale(spec, lift),
+        pos: yard,
+        scale: 1 - (1 - spec.pressScale) * bump,
       );
     }
 
-    return TokenTimeline._(
-      spec.captureShakeMs + spec.captureReturnMs,
-      0,
-      sample,
-    );
+    return TokenTimeline._(flightEnd + spec.landSquashMs, 0, sample);
   }
 
   /// Reduced-motion move: fade out at [from], fade in at [to].

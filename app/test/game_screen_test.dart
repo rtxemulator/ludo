@@ -9,6 +9,7 @@ import 'package:ludo_app/ui/board/board_view.dart';
 import 'package:ludo_app/ui/dice/dock_layer.dart';
 import 'package:ludo_app/ui/screens/game_screen.dart';
 
+// The turn ticker never lets the tree settle, so tests advance time by hand.
 void main() {
   testWidgets('screen shows board and docks and survives a few turns',
       (tester) async {
@@ -69,35 +70,35 @@ void main() {
     );
 
     await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('New game'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Rules'), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('UI orientation'), findsOneWidget);
 
     await tester.tap(find.text('Fixed'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(settings.orientation, UiOrientation.fixed);
 
     await tester.tap(find.text('On'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(settings.reduceMotion, ReduceMotion.on);
     expect(game.spec.reducedMotion, isTrue);
 
     expect(settings.haptics, isFalse);
     await tester.tap(find.byType(Switch).first);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(settings.haptics, isTrue);
     expect(game.feedback.enabled, isTrue);
     game.feedback.enabled = false;
 
     await tester.tap(find.byIcon(Icons.arrow_back));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Close'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('New game'), findsNothing);
     expect(tester.takeException(), isNull);
 

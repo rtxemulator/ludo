@@ -5,6 +5,7 @@ class Move {
     required this.tokenIndex,
     required this.from,
     required this.to,
+    this.dieIndex = 0,
   });
 
   /// Seat that owns the moved token. With teammate control this can differ
@@ -20,19 +21,25 @@ class Move {
   /// Relative position after the move.
   final int to;
 
+  /// Index into `GameState.bank` of the die this move spends. Always `0`
+  /// when `RulesConfig.bankedRolls` is off (the single pending die).
+  final int dieIndex;
+
   @override
   bool operator ==(Object other) =>
       other is Move &&
       other.owner == owner &&
       other.tokenIndex == tokenIndex &&
       other.from == from &&
-      other.to == to;
+      other.to == to &&
+      other.dieIndex == dieIndex;
 
   @override
-  int get hashCode => Object.hash(owner, tokenIndex, from, to);
+  int get hashCode => Object.hash(owner, tokenIndex, from, to, dieIndex);
 
   @override
-  String toString() => 'Move(seat $owner token $tokenIndex: $from -> $to)';
+  String toString() => 'Move(seat $owner token $tokenIndex: $from -> $to'
+      '${dieIndex == 0 ? '' : ', die #$dieIndex'})';
 }
 
 /// One decision in the move log: `(seat, dice, tokenIndex)`.

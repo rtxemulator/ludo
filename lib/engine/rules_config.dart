@@ -24,6 +24,7 @@ class RulesConfig {
     this.exactRollToFinish = true,
     this.blockades = false,
     this.teamsEnabled = false,
+    this.bankedRolls = false,
   });
 
   /// Balanced, standard tournament rules (all defaults).
@@ -74,6 +75,11 @@ class RulesConfig {
   /// configuration by the caller.
   final bool teamsEnabled;
 
+  /// Banked ("stacking") dice: a turn first rolls all its dice into a bank
+  /// ("Roll All First"), then spends them in any order, all-or-nothing.
+  /// Off by default; see `docs/ludo-rules.md` section 8.
+  final bool bankedRolls;
+
   RulesConfig copyWith({
     EndMode? endMode,
     bool? teammateControl,
@@ -85,6 +91,7 @@ class RulesConfig {
     bool? exactRollToFinish,
     bool? blockades,
     bool? teamsEnabled,
+    bool? bankedRolls,
   }) {
     return RulesConfig(
       endMode: endMode ?? this.endMode,
@@ -97,6 +104,7 @@ class RulesConfig {
       exactRollToFinish: exactRollToFinish ?? this.exactRollToFinish,
       blockades: blockades ?? this.blockades,
       teamsEnabled: teamsEnabled ?? this.teamsEnabled,
+      bankedRolls: bankedRolls ?? this.bankedRolls,
     );
   }
 
@@ -112,7 +120,8 @@ class RulesConfig {
       other.extraTurnOnHome == extraTurnOnHome &&
       other.exactRollToFinish == exactRollToFinish &&
       other.blockades == blockades &&
-      other.teamsEnabled == teamsEnabled;
+      other.teamsEnabled == teamsEnabled &&
+      other.bankedRolls == bankedRolls;
 
   @override
   int get hashCode => Object.hash(
@@ -126,6 +135,7 @@ class RulesConfig {
         exactRollToFinish,
         blockades,
         teamsEnabled,
+        bankedRolls,
       );
 
   @override
@@ -135,5 +145,5 @@ class RulesConfig {
       'extraTurnOnCapture: $extraTurnOnCapture, '
       'extraTurnOnHome: $extraTurnOnHome, '
       'exactRollToFinish: $exactRollToFinish, blockades: $blockades, '
-      'teamsEnabled: $teamsEnabled)';
+      'teamsEnabled: $teamsEnabled, bankedRolls: $bankedRolls)';
 }

@@ -5,8 +5,15 @@ pubspec.lock
 *.iml
 .idea/
 .flutter-plugins*
-android/key.properties
+**/key.properties
 *.jks
 *.keystore
 
 CLAUDE.local.md
+
+# Flutter app: Android platform files are generated in CI for now
+# (flutter create --platforms=android); app/android/ is now committed.
+app/ios/
+app/.metadata
+app/README.md
+app/pubspec.lock

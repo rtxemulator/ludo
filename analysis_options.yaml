@@ -1,6 +1,9 @@
 include: package:lints/recommended.yaml
 
 analyzer:
+  exclude:
+    # Flutter app has its own pubspec/analysis (CI job `app`).
+    - app/**
   errors:
     # Engine must stay pure Dart; see CLAUDE.md
     uri_does_not_exist: error

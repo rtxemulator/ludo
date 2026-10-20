@@ -46,7 +46,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
 ## 2. Intentionally Deferred Design Decisions
 
 - **AI Heuristic Weights & MCTS Tuning:** Detail before starting Milestone 4 (needs self-play on a working engine).
-- **UI Animation Curves & Shaders:** Detail before starting Milestone 2 (best evaluated interactively on device).
+- **UI Animation Curves & Shaders:** Resolved 2026-10-16 in `docs/ludo-animation.md` (values are starting points, tune on device).
 - **P2P Wire Protocol & ICE Negotiation:** Detail before starting Milestone 8.
 
 ---
@@ -61,3 +61,9 @@ See `CLAUDE.md` in the repo root.
 
 Prompt the agent:
 > "Implement Milestone 1 from docs/ludo-roadmap.md. Write the engine and tests only, no UI."
+
+---
+
+## 5. Milestone 2 polish round
+
+Design and work plan for the post-device-test polish (haptics, 3D dice, docks, frame, token look, FX, menu, face-to-face orientation, banked-roll UI contract): `docs/ludo-ui-ux.md`. Work is split into 4 chats (section 12 of that doc).

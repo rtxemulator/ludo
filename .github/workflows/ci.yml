@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'milestone-*']
   pull_request:
   workflow_dispatch:
 
@@ -38,3 +38,64 @@ jobs:
 
       - name: Test
         run: dart test
+
+  app:
+    name: App (analyze + test + release APK)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # app/android/ is committed (native haptics channel). Only generate it
+      # if it is ever missing.
+      - name: Generate Android platform files (if missing)
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name ludo_app --org dev.ludo .
+          fi
+          rm -f test/widget_test.dart
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK (arm64)
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: APK size
+        run: |
+          ls -l build/app/outputs/flutter-apk/*.apk
+          echo "APK: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ludo-arm64-release
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+      # Profile-mode APK for frame timing on a real device (Settings > Frame
+      # timing overlay, DevTools). Same code as release, AOT, with the
+      # profiling hooks left on.
+      - name: Build profile APK (arm64)
+        run: flutter build apk --profile --target-platform android-arm64
+
+      - name: Profile APK size
+        run: |
+          ls -l build/app/outputs/flutter-apk/app-profile.apk
+          echo "Profile APK: $(du -h build/app/outputs/flutter-apk/app-profile.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ludo-arm64-profile
+          path: app/build/app/outputs/flutter-apk/app-profile.apk

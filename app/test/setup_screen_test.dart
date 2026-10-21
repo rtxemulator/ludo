@@ -147,6 +147,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('rule-banked')));
         await tester.pump();
         await tester.tap(find.byKey(const ValueKey('house-rules')));
+        // One frame to start the expansion, one long frame to finish it.
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(find.text('Blockades'));
         await tester.pump();

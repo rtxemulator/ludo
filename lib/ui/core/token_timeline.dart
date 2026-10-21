@@ -149,6 +149,39 @@ class TokenTimeline {
     return TokenTimeline._(fade * 2, fade, sample);
   }
 
+  /// A gentle glide from [from] to [to] (a banked-rolls revert): one arc of
+  /// [MotionSpec.revertArc] cells over [MotionSpec.revertMs] and the usual
+  /// landing press. Reduced motion cross-fades like [TokenTimeline.jump].
+  factory TokenTimeline.glide({
+    required Pt from,
+    required Pt to,
+    MotionSpec spec = MotionSpec.standard,
+  }) {
+    if (spec.reducedMotion) {
+      return TokenTimeline.jump(from: from, to: to, spec: spec);
+    }
+    final flight = spec.revertMs;
+    TokenPose sample(double t) {
+      if (t < flight) {
+        final u = t / flight;
+        final lift = arc(u, spec.revertArc);
+        return TokenPose(
+          pos: Pt.lerp(from, to, easeInOutCubic(u)),
+          lift: lift,
+          scale: _heightScale(spec, lift),
+        );
+      }
+      final u = (t - flight) / spec.landSquashMs;
+      final bump = math.sin(math.pi * clamp01(u));
+      return TokenPose(
+        pos: to,
+        scale: 1 - (1 - spec.pressScale) * bump,
+      );
+    }
+
+    return TokenTimeline._(flight + spec.landSquashMs, flight, sample);
+  }
+
   /// Total length in milliseconds.
   final double durationMs;
 

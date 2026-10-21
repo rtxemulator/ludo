@@ -122,6 +122,57 @@ void main() {
           }
         }
       });
+
+      test('every roll tray stays on screen and clear of the menu', () {
+        for (final d in layout.docks) {
+          expect(screen.containsBox(d.tray), isTrue, reason: 'tray ${d.seat}');
+          expect(d.tray.overlaps(layout.menu), isFalse,
+              reason: 'tray ${d.seat} menu');
+          if (layout.placement != DockPlacement.inYard) {
+            expect(d.tray.overlaps(layout.frame), isFalse,
+                reason: 'tray ${d.seat} frame');
+          }
+        }
+      });
+
+      test('outer trays never touch a dock, inner ones live in their own', () {
+        for (final d in layout.docks) {
+          if (d.trayOuter) {
+            for (final other in layout.docks) {
+              expect(d.tray.overlaps(other.rect), isFalse,
+                  reason: 'tray ${d.seat} vs dock ${other.seat}');
+            }
+          } else {
+            expect(d.rect.containsBox(d.tray), isTrue,
+                reason: 'inner tray ${d.seat}');
+            // It sits between the die and the player's edge.
+            final die = Box.centered(d.dieCenter, d.dieSize, d.dieSize);
+            expect(d.tray.overlaps(die), isFalse, reason: 'tray ${d.seat} die');
+          }
+        }
+      });
+
+      test('trays of different seats never overlap each other', () {
+        for (var i = 0; i < 4; i++) {
+          for (var j = i + 1; j < 4; j++) {
+            expect(layout.docks[i].tray.overlaps(layout.docks[j].tray), isFalse,
+                reason: 'trays $i and $j');
+          }
+        }
+      });
+
+      test('a chip fits its tray and is never absurdly small', () {
+        for (final d in layout.docks) {
+          final depth = d.edge == SeatEdge.top || d.edge == SeatEdge.bottom
+              ? d.tray.height
+              : d.tray.width;
+          expect(d.chipSize, greaterThan(0.3 * layout.cell));
+          expect(d.chipSize, lessThanOrEqualTo(depth));
+          expect(d.chipSize,
+              lessThanOrEqualTo(TableLayout.chipCells * layout.cell + 1e-9));
+          expect(d.trayCapacity, greaterThanOrEqualTo(3));
+        }
+      });
     });
   }
 
@@ -155,6 +206,19 @@ void main() {
       expect(sharedUiTurns(layout, 0, UiOrientation.table), 2);
       expect(sharedUiTurns(layout, 3, UiOrientation.table), 0);
       expect(sharedUiTurns(layout, 0, UiOrientation.fixed), 0);
+    });
+
+    test('trays are 1.1-cell chips in the margin beyond each dock', () {
+      for (final d in layout.docks) {
+        expect(d.trayOuter, isTrue);
+        expect(d.chipSize, closeTo(1.1 * layout.cell, 1e-6));
+        expect(d.trayCapacity, closeTo(6 / 1.1, 1e-6));
+        expect(d.trayCenter.x, closeTo(d.rect.center.x, 1e-6));
+      }
+      // Upper seats: the tray is above the dock; lower seats: below it.
+      expect(layout.docks[0].tray.bottom, lessThan(layout.docks[0].rect.top));
+      expect(
+          layout.docks[2].tray.top, greaterThan(layout.docks[2].rect.bottom));
     });
 
     test('the menu is top-centre', () {

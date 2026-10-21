@@ -57,6 +57,9 @@ void main() {
       for (var i = 0; i < n; i++) {
         expect(hitChip(fanX(i, n, 5.5) + 0.05, n, 5.5), i);
       }
+      // A tap far from every chip hits nothing when a slop is given.
+      expect(hitChip(3, 2, 5, slop: 0.9), -1);
+      expect(hitChip(fanX(1, 2, 5) + 0.8, 2, 5, slop: 0.9), 1);
       // Exactly between two chips: the later one is on top.
       final mid = (fanX(0, 2, 5) + fanX(1, 2, 5)) / 2;
       expect(hitChip(mid, 2, 5), 1);
@@ -187,6 +190,23 @@ void main() {
       expect(burst.opacity, lessThan(0.3));
 
       tray.prune(1000 + total, _spec);
+      expect(tray.isEmpty, isTrue);
+    });
+
+    test('a delayed exit holds the chips still until it starts', () {
+      final tray = _tray([2, 5]);
+      tray.exitAll(0, ChipExit.revert, 1000, delayMs: 260);
+      expect(tray.valuesOf(0), isEmpty);
+      final chip = tray.chips.first;
+      final held = tray.pose(chip, 1100, _spec)!;
+      expect(held.scale, 1);
+      expect(held.opacity, 1);
+      final going = tray.pose(chip, 1260 + _spec.tray.revertMs / 2, _spec)!;
+      expect(going.opacity, closeTo(0.5, 1e-9));
+      // Pruning waits for the delay too.
+      tray.prune(1000 + _spec.tray.revertMs, _spec);
+      expect(tray.chips, isNotEmpty);
+      tray.prune(1260 + 30 + _spec.tray.revertMs, _spec); // last chip's stagger
       expect(tray.isEmpty, isTrue);
     });
 

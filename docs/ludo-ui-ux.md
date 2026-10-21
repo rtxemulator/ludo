@@ -203,6 +203,8 @@ UI built on that contract:
 
 All of this is hidden when the rule is off, so it does not block the other work.
 
+**Answers as built (rules chat, `RulesConfig.bankedRolls`, off by default, in no preset):** (1) `GameState.bank` (current seat's dice in rolled order, `bankOf(seat)`), `bankPhase` (`rolling` / `moving`), `turnSnapshot`; `dice` is always `null`, so the UI uses `awaitingRoll` / `awaitingMove`. (2) `Engine.roll` only banks (`RollOutcome.banked` on a 6, `awaitingMove` when a 1-5 ends the sequence); **there is no `maxBank`**. (3) `legalMoves` returns one `Move` per token and distinct value, each with `dieIndex`; only moves after which the rest of the bank can still be spent. (4) A capture or a token reaching home returns the state in the `rolling` phase with the rest of the bank, the bonus dice are added to the bank. (5) Triple six wipes the whole bank (moves kept) and passes the turn. (6) The bank never survives a pass; a dead end (`bankDeadEnd`) reverts the board to `turnSnapshot` and passes. Because there is no cap, the "bank full" shake of the contract is used for a tap on the live die while the bank is being spent.
+
 ---
 
 ## 11. Work plan
@@ -234,7 +236,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 | A | P0 + P1 | Native haptics + pure-Dart core. Ends with `dart test` green and one device check (haptics). **Done**, see notes below. |
 | B | P2 + P3 + P4 | All visual layers (table, frame, tokens, docks, 3D dice). Needs the P1 core; share one device review at the end. **Done**, see notes below. |
 | C | P5 + P6 + P7 | FX, menu/settings/orientation, performance pass. **Done**, see notes below (awaiting the device review). |
-| D | P8 | Banked-roll tray, only after the rules chat defines the engine API (section 10). |
+| D | P8 | Banked-roll tray, only after the rules chat defines the engine API (section 10). **Done**, see notes below (awaiting the device review). |
 
 ### Done notes
 
@@ -270,6 +272,15 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 - Settings (`app/lib/settings/game_settings.dart`, in memory): haptics, reduce motion (System / On / Off), UI orientation (Table / Fixed), auto-rotate shared UI (table only), frame timing overlay. The haptics test sheet and the temporary round buttons are gone.
 - P7: `FrameTimingOverlay` (`SchedulerBinding.addTimingsCallback`, mounted only while the setting is on) shows fps, dropped/slow frames, UI/raster times, p95/worst and the game's own paint time (`PaintProbe`, 4 ms budget). CI now also builds and uploads `ludo-arm64-profile` (profile-mode APK). Static fixes for per-frame allocations: dock halos and the yard turn light reuse one unit shader per colour (alpha through a `dstIn` filter) instead of building a gradient every frame. **No on-device numbers yet**: read them with the profile APK and the overlay (checklist in the chat C hand-off).
 
+**Chat D (P8), done.** Branch `milestone-2-roll-tray` (off `milestone-2-banked-rolls`, which carries the engine change). Nothing in `lib/engine/` was touched. Decisions the doc left open:
+
+- Pure core (`lib/ui/core/`, tested with `dart test`): `bank_tray.dart` (`BankTray`: chips with stable ids, pop / slide / select / spend / wipe / revert as functions of time; `fanX`, `hitChip`), `bank_choice.dart` (`BankChoice`: selection, glow set, what a tap on a token or chip means), `revert_plan.dart` (`RevertAnimation`: tokens gliding back after a dead end, `TokenTimeline.glide`), `TraySpec` in `motion_spec.dart` (every number), `DockLayout.tray / chipSize / trayOuter` in `table_layout.dart`, `HapticEvent.select`.
+- Tray placement: a strip **beyond the dock on the player's side** (6 cells long, 1.5 deep, chips 1.1 cells) when the margin has at least 1 cell to spare (every phone size, landscape included); otherwise the strip of the dock between the die and the player's edge (portrait tablets, near-square screens, yards), where chips shrink to fit (0.4 to 0.7 cell). Chips are laid out in the dock frame and turned to the edge; their **faces** turn with `seatTextTurns`. Fan: pitch 1.12 chips, tilt 0.06 rad per slot (cap 0.3), 0.04 sag; a full tray overlaps its chips (pitch down to 0.25) instead of overflowing.
+- Selection: with a single playable value its chip is selected automatically; with several nothing is selected and every legal token glows. Tapping a chip selects it (lift 1.18x + glow) and the glow narrows to its value; tapping it again deselects. Tapping a token spends the selected die; with nothing selected a token with one option spends it, a token with several options prompts (the tray swells once). A token that cannot use the selected die but can use another moves the selection to that chip without spending. A chip with no legal move shakes the tray. Tap targets: the whole tray strip, nearest chip within 0.9 chips.
+- Spend: the chip at the spent `dieIndex` flies to the token's resting cell while the token hops (300 ms, shrinks to 0.5, dissolves over the last 35%, extra height as scale). A forced single move waits 280 ms so its chip is seen first. New dice pop in (200 ms overshoot) as the die settles. Triple six: chips shake then burst, 45 ms apart, with the usual "Three sixes" toast. Dead end: the last die joins the bank for 260 ms, then the chips shrink away while every token the turn moved glides back (380 ms, 40 ms apart, dust at each landing) and the turn passes when the last one lands; toast "Turn undone". Reduced motion: no flight, glide, shake, swell or hold; chips fade in place.
+- While dice are to be spent the live die is dimmed to 60% and a tap on it shakes the die and the tray ("bank full" stand-in, `illegal` haptic).
+- Controller (`GameController`): `banked`, `tray`, `choice`, `glowMoves`, `chipTap`, `trayTappable`, `revert`, `bankShakeMs`; `roll` / `_finishRoll` / `_finishMove` branch on `banked`, everything else is the old path. `rules` is now switchable: `setBankedRolls(bool)` starts a new game. **Temporary switch:** Menu > Rules > "Banked rolls" (until the Milestone 3 new-game screen has rule toggles).
+
 Rules for every chat:
 - Start by reading `CLAUDE.md` and `docs/ludo-ui-ux.md` (plus `docs/ludo-animation.md` if touching motion). Do **not** re-plan.
 - Work on branch `milestone-2-ui`; commit before and after each change (signed); push; CI job `app` must be green.
@@ -285,4 +296,5 @@ Starter prompt (replace the steps):
 ## 13. Open questions
 
 - Dock position: table margin beside the yard (this doc, default) vs inside the yard. Say if you prefer inside.
-- Rules chat answers to the section 10 list.
+- ~~Rules chat answers to the section 10 list.~~ Answered (see "Answers as built" in section 10); `maxBank` does not exist.
+- Tablet-portrait and square screens use small chips (inner tray); say if that needs a better home (e.g. shrinking the board further).

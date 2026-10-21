@@ -91,11 +91,13 @@ class TokenLayerPainter extends CustomPainter {
     final state = game.state;
     final plan = game.plan;
     final planT = now - game.planStartMs;
+    final revert = game.revert;
+    final revertT = now - game.revertStartMs;
 
     // Legal-move glow sits under everything.
     if (game.phase == GamePhase.awaitingMove) {
       final pulse = PulseSample.at(now, game.spec);
-      for (final move in game.legal) {
+      for (final move in game.glowMoves) {
         final p = game.resting[move.owner][move.tokenIndex];
         final center = Offset(p.x, p.y);
         canvas.save();
@@ -124,11 +126,13 @@ class TokenLayerPainter extends CustomPainter {
     final items = <_Item>[];
     for (final seat in state.activeSeats) {
       for (var i = 0; i < tokensPerSeat; i++) {
-        final pose = plan?.poseOf(seat, i, planT);
+        final pose =
+            plan?.poseOf(seat, i, planT) ?? revert?.poseOf(seat, i, revertT);
         var scale = game.restScales[seat][i];
         var layer = _Layer.resting;
-        if (pose != null && plan != null) {
-          final isMover = seat == plan.owner && i == plan.tokenIndex;
+        if (pose != null) {
+          final isMover =
+              plan != null && seat == plan.owner && i == plan.tokenIndex;
           scale = isMover ? game.moverBaseScale : 1.0;
           layer = isMover ? _Layer.mover : _Layer.victim;
         }

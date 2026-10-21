@@ -33,6 +33,9 @@ enum HapticEvent {
   noMove,
   six,
   win,
+
+  /// A roll-tray chip was selected (banked rolls).
+  select,
 }
 
 /// Minimum time between two pulses (a faster burst just blurs).
@@ -66,6 +69,7 @@ const Map<HapticEvent, List<HapticPulse>> hapticPatterns = {
   HapticEvent.noMove: [HapticPulse(HapticKind.tick, 0.4)],
   // Follows the settle click of the same roll.
   HapticEvent.six: [HapticPulse(HapticKind.click, 0.7, afterMs: 80)],
+  HapticEvent.select: [HapticPulse(HapticKind.tick, 0.35)],
   HapticEvent.win: [
     HapticPulse(HapticKind.click, 0.4),
     HapticPulse(HapticKind.click, 0.55, afterMs: 90),

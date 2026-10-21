@@ -59,7 +59,16 @@ double fanY(int index, int count, MotionSpec spec) {
 /// Index of the chip nearest to [x] (chip edges from the tray centre) among
 /// [count] chips in a tray [capacity] wide; the later (topmost) chip wins a
 /// tie. `-1` for an empty tray.
-int hitChip(double x, int count, double capacity, {double gap = 0.12}) {
+///
+/// A tap farther than [slop] chip edges from the nearest chip's centre hits
+/// nothing (`-1`), so a tap on the empty end of a long tray is not a guess.
+int hitChip(
+  double x,
+  int count,
+  double capacity, {
+  double gap = 0.12,
+  double slop = double.infinity,
+}) {
   var best = -1;
   var bestDistance = double.infinity;
   for (var i = 0; i < count; i++) {
@@ -69,7 +78,7 @@ int hitChip(double x, int count, double capacity, {double gap = 0.12}) {
       best = i;
     }
   }
-  return best;
+  return bestDistance > slop ? -1 : best;
 }
 
 /// One chip. Fields are the bookkeeping [BankTray] needs; read poses through
@@ -214,11 +223,12 @@ class BankTray {
     _relayout(seat, now);
   }
 
-  /// Every chip of [seat] leaves with [kind] (`wipe` or `revert`).
-  void exitAll(int seat, ChipExit kind, double now) {
+  /// Every chip of [seat] leaves with [kind] (`wipe` or `revert`), starting
+  /// [delayMs] from [now] (the chips hold still until then).
+  void exitAll(int seat, ChipExit kind, double now, {double delayMs = 0}) {
     var order = 0;
     for (final chip in presentOf(seat)) {
-      _leave(chip, kind, now, order++);
+      _leave(chip, kind, now, order++, delayMs: delayMs);
     }
   }
 
@@ -323,11 +333,17 @@ class BankTray {
     }
   }
 
-  void _leave(TrayChip chip, ChipExit kind, double now, int order) {
+  void _leave(
+    TrayChip chip,
+    ChipExit kind,
+    double now,
+    int order, {
+    double delayMs = 0,
+  }) {
     chip.exitX = _slideX(chip, now);
     chip.exitSelect = _isSelected(chip) ? 1 : 0;
     chip.exit = kind;
-    chip.exitMs = now;
+    chip.exitMs = now + delayMs;
     chip.exitOrder = order;
   }
 

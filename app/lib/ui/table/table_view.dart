@@ -87,6 +87,7 @@ class TableView extends StatelessWidget {
                       game: game,
                       layout: layout,
                       palette: palette,
+                      orientation: settings.orientation,
                     ),
                   ),
                   Positioned.fill(

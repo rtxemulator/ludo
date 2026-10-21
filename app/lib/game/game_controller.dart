@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/haptics.dart';
+import 'package:ludo/ui/core/bank_choice.dart';
+import 'package:ludo/ui/core/bank_tray.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/dice3d.dart';
 import 'package:ludo/ui/core/frame_stats.dart';
@@ -9,6 +11,7 @@ import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/ui/core/revert_plan.dart';
 
 import '../haptics/haptics_service.dart';
 
@@ -31,12 +34,13 @@ class DockToast {
 /// never mutates [state] directly.
 class GameController extends ChangeNotifier {
   GameController({
-    this.rules = const RulesConfig(),
+    RulesConfig rules = const RulesConfig(),
     int? seed,
     double Function()? now,
     bool haptics = true,
     HapticsService? hapticsService,
-  })  : _now = now ?? _stopwatchClock(),
+  })  : _rules = rules,
+        _now = now ?? _stopwatchClock(),
         feedback = hapticsService ?? HapticsService() {
     feedback.enabled = haptics;
     newGame(seed: seed);
@@ -49,15 +53,37 @@ class GameController extends ChangeNotifier {
 
   static const BoardGeometry _geo = BoardGeometry();
 
-  final RulesConfig rules;
+  RulesConfig _rules;
   final double Function() _now;
+
+  /// The rules of the running match.
+  RulesConfig get rules => _rules;
+
+  /// Whether banked ("stacking") dice rolls are on. Everything banked-only
+  /// (roll tray, selection, revert) is inert when this is `false`.
+  bool get banked => _rules.bankedRolls;
+
+  /// Switches banked rolls on or off; a change starts a new game.
+  void setBankedRolls(bool on) {
+    if (_rules.bankedRolls == on) {
+      return;
+    }
+    _rules = _rules.copyWith(bankedRolls: on);
+    newGame();
+  }
 
   /// Haptic feedback (native channel); `feedback.enabled` is the global
   /// toggle.
   final HapticsService feedback;
 
+  MotionSpec _spec = MotionSpec.standard;
+
   /// Animation timings; set to [MotionSpec.reduced] for reduced motion.
-  MotionSpec spec = MotionSpec.standard;
+  MotionSpec get spec => _spec;
+  set spec(MotionSpec value) {
+    _spec = value;
+    tray.spec = value;
+  }
 
   /// Frame clock (ms). Painters listen to this, widgets listen to `this`.
   final ValueNotifier<double> clock = ValueNotifier<double>(0);
@@ -119,6 +145,24 @@ class GameController extends ChangeNotifier {
   MoveAnimationPlan? plan;
   double planStartMs = 0;
 
+  /// Banked rolls: the chips of the roll trays (view state; the dice
+  /// themselves are `state.bank`).
+  final BankTray tray = BankTray();
+
+  /// Banked rolls: what can be spent right now and which chip is selected
+  /// (only in the moving phase, `null` otherwise).
+  BankChoice? choice;
+
+  /// Banked rolls: tokens gliding back after a dead end, and when that
+  /// started (frame-clock ms; may lie slightly ahead while the last chip is
+  /// shown).
+  RevertAnimation? revert;
+  double revertStartMs = 0;
+
+  /// Banked rolls: when a tap on the live die was refused because the bank
+  /// has to be spent first (the die and the tray shake).
+  double bankShakeMs = -1e9;
+
   /// Scale the animated token keeps while hopping (stacking at its target).
   double moverBaseScale = 1;
 
@@ -127,6 +171,9 @@ class GameController extends ChangeNotifier {
   late List<List<double>> restScales;
 
   RollResult? _pendingRoll;
+  GameState? _rollBefore;
+  Move? _autoMove;
+  double _autoMoveAtMs = 0;
   GameState? _after;
   bool _impactFired = false;
   bool _diceImpactFired = false;
@@ -148,7 +195,7 @@ class GameController extends ChangeNotifier {
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
-    state = Engine.newGame(seed: s, rules: rules);
+    state = Engine.newGame(seed: s, rules: _rules);
     phase = GamePhase.awaitingRoll;
     legal = const [];
     lastRoll = null;
@@ -164,6 +211,12 @@ class GameController extends ChangeNotifier {
     gameOverMs = -1e9;
     _tickerStopNotified = false;
     plan = null;
+    tray.clear();
+    choice = null;
+    revert = null;
+    bankShakeMs = -1e9;
+    _autoMove = null;
+    _rollBefore = null;
     _pendingRoll = null;
     _after = null;
     diceSeat = state.currentSeat;
@@ -184,6 +237,7 @@ class GameController extends ChangeNotifier {
       return;
     }
     final result = Engine.roll(state);
+    _rollBefore = state;
     _pendingRoll = result;
     diceSeat = state.currentSeat;
     rollerSeat = diceSeat;
@@ -227,6 +281,15 @@ class GameController extends ChangeNotifier {
         quickRoll();
         return;
       }
+      if (banked && phase == GamePhase.awaitingMove) {
+        // The live die is the roll button, but the bank has to be spent
+        // first: it shakes, and so does the tray.
+        final now = _now();
+        bankShakeMs = now;
+        tray.shake(state.currentSeat, now);
+        feedback.play(HapticEvent.illegal);
+        return;
+      }
     }
     pulseDock(seat);
   }
@@ -260,6 +323,9 @@ class GameController extends ChangeNotifier {
     if (phase != GamePhase.awaitingMove) {
       return false;
     }
+    if (banked) {
+      return _tapBanked(grid);
+    }
     Move? best;
     var bestDistance = 0.8;
     for (final move in legal) {
@@ -275,6 +341,100 @@ class GameController extends ChangeNotifier {
     }
     _startMove(best);
     return true;
+  }
+
+  /// Banked rolls: a tap on the board while dice are to be spent. A token
+  /// with one option spends it, the selected chip decides otherwise, and a
+  /// token with several options prompts a choice from the tray.
+  bool _tapBanked(Pt grid) {
+    final c = choice;
+    if (c == null) {
+      return false;
+    }
+    Move? best;
+    var bestDistance = 0.8;
+    for (final move in c.legal) {
+      final d = resting[move.owner][move.tokenIndex].distanceTo(grid);
+      if (d <= bestDistance) {
+        bestDistance = d;
+        best = move;
+      }
+    }
+    if (best == null) {
+      _illegalTap(grid);
+      return false;
+    }
+    final result = c.tapToken(best.owner, best.tokenIndex);
+    switch (result.kind) {
+      case TokenTapKind.spend:
+        _startMove(result.move!);
+        return true;
+      case TokenTapKind.select:
+        _syncSelection();
+        feedback.play(HapticEvent.select);
+        notifyListeners();
+        return false;
+      case TokenTapKind.prompt:
+        tray.prompt(state.currentSeat, _now());
+        feedback.play(HapticEvent.noMove);
+        return false;
+      case TokenTapKind.none:
+        _illegalTap(grid);
+        return false;
+    }
+  }
+
+  /// Banked rolls: a tap on chip [chip] (an index into the bank) of [seat]'s
+  /// tray. Selects it when it can be spent now, otherwise the tray shakes.
+  void chipTap(int seat, int chip) {
+    final c = choice;
+    if (!banked ||
+        phase != GamePhase.awaitingMove ||
+        c == null ||
+        seat != state.currentSeat) {
+      return;
+    }
+    if (c.tapChip(chip)) {
+      _syncSelection();
+      feedback.play(HapticEvent.select);
+      notifyListeners();
+    } else {
+      tray.shake(seat, _now());
+      feedback.play(HapticEvent.illegal);
+    }
+  }
+
+  /// Whether [seat]'s chips take taps now.
+  bool trayTappable(int seat) =>
+      banked &&
+      phase == GamePhase.awaitingMove &&
+      choice != null &&
+      seat == state.currentSeat;
+
+  /// Tokens whose glow is drawn: the moves of the selected chip (every legal
+  /// move while none is selected), one entry per token.
+  List<Move> get glowMoves {
+    if (!banked) {
+      return legal;
+    }
+    final seen = <int>{};
+    return [
+      for (final m in choice?.glowMoves ?? const <Move>[])
+        if (seen.add(m.owner * tokensPerSeat + m.tokenIndex)) m,
+    ];
+  }
+
+  /// Tells the tray which chip is selected.
+  void _syncSelection() {
+    tray.select(state.currentSeat, choice?.selected, _now());
+  }
+
+  /// Gives each seat's tray the width its layout slot has (chips per row).
+  void syncTrayCapacity(List<double> chips) {
+    final now = _now();
+    for (var seat = 0; seat < chips.length && seat < seatCount; seat++) {
+      tray.setCapacity(seat, chips[seat], now);
+    }
   }
 
   /// A tap during a choice that hit a token with no move (an opponent's, or
@@ -310,6 +470,7 @@ class GameController extends ChangeNotifier {
     PaintProbe.nextFrame();
     clock.value = now;
     fx.prune(now, spec);
+    tray.prune(now, spec);
     if (phase == GamePhase.rolling) {
       final t = now - diceStartMs;
       final impacts = dice!.impactsMs;
@@ -321,6 +482,16 @@ class GameController extends ChangeNotifier {
       // The face locks at the settle; the reveal ring plays on afterwards.
       if (t >= dice!.settleMs) {
         _finishRoll();
+      }
+    } else if (phase == GamePhase.awaitingMove) {
+      final auto = _autoMove;
+      if (auto != null && now >= _autoMoveAtMs) {
+        // A forced spend of the bank: the chip had its moment, now it goes.
+        _startMove(auto);
+      }
+    } else if (phase == GamePhase.moving && revert != null) {
+      if (now - revertStartMs >= revert!.totalMs) {
+        _finishRevert();
       }
     } else if (phase == GamePhase.moving) {
       final t = now - planStartMs;
@@ -347,9 +518,15 @@ class GameController extends ChangeNotifier {
   }
 
   void _finishRoll() {
-    final dimSeat = state.controlledSeat;
     final result = _pendingRoll!;
     _pendingRoll = null;
+    final before = _rollBefore ?? state;
+    _rollBefore = null;
+    if (banked) {
+      _finishBankedRoll(before, result);
+      return;
+    }
+    final dimSeat = state.controlledSeat;
     state = result.state;
     lastRoll = result.value;
     seatDice[rollerSeat] = dice;
@@ -380,10 +557,111 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Banked rolls: applies the outcome of one roll (the die only joined the
+  /// bank, or the sequence ended, or it was wiped or reverted).
+  void _finishBankedRoll(GameState before, RollResult result) {
+    final now = _now();
+    final seat = rollerSeat;
+    final dimSeat = before.controlledSeat;
+    state = result.state;
+    lastRoll = result.value;
+    seatDice[seat] = dice;
+    _refreshLayout();
+    feedback.play(HapticEvent.diceSettle);
+    if (result.value == 6) {
+      feedback.play(HapticEvent.six);
+    }
+    switch (result.outcome) {
+      case RollOutcome.banked:
+        // A 6: the die joins the bank and the same seat rolls again.
+        tray.append(seat, result.value, now);
+        phase = GamePhase.awaitingRoll;
+      case RollOutcome.awaitingMove:
+        tray.append(seat, result.value, now);
+        _enterMoving();
+      case RollOutcome.tripleSixForfeit:
+        // The whole bank is wiped; moves already made stay.
+        tray.exitAll(seat, ChipExit.wipe, now);
+        message = 'Three sixes';
+        toasts[seat] = DockToast(message!, now);
+        noMoveSeat = dimSeat;
+        noMoveMs = now;
+        feedback.play(HapticEvent.noMove);
+        _activate(state.currentSeat);
+        phase = GamePhase.awaitingRoll;
+      case RollOutcome.bankDeadEnd:
+        // The last die joins the bank for a moment, then the bank goes and
+        // the board glides back to where the turn began. `before` is the
+        // board with the turn's moves; `state` is already reverted.
+        const hold = 260.0;
+        final delay = spec.reducedMotion ? 0.0 : hold;
+        tray.append(seat, result.value, now);
+        tray.exitAll(seat, ChipExit.revert, now, delayMs: delay);
+        message = 'Turn undone';
+        toasts[seat] = DockToast(message!, now);
+        feedback.play(HapticEvent.noMove);
+        final anim = RevertAnimation.plan(
+          before: before,
+          after: state,
+          spec: spec,
+          startMs: now + delay,
+        );
+        if (anim.isEmpty) {
+          _activate(state.currentSeat);
+          phase = GamePhase.awaitingRoll;
+        } else {
+          fx.addAll(anim.effects);
+          revert = anim;
+          revertStartMs = now + delay;
+          phase = GamePhase.moving;
+        }
+      case RollOutcome.noLegalMoves:
+        // Not produced with banked rolls; pass cleanly if it ever is.
+        _activate(state.currentSeat);
+        phase = GamePhase.awaitingRoll;
+    }
+    notifyListeners();
+  }
+
+  /// The tokens are back: the next seat may roll.
+  void _finishRevert() {
+    revert = null;
+    _activate(state.currentSeat);
+    phase = GamePhase.awaitingRoll;
+    notifyListeners();
+  }
+
+  /// Banked rolls: the moving phase (or the next spend of it) starts. Picks
+  /// the selection (automatic when only one value can be played) and
+  /// schedules a forced spend.
+  void _enterMoving() {
+    final now = _now();
+    final seat = state.currentSeat;
+    tray.reconcile(seat, state.bank, now);
+    final c = BankChoice.of(state);
+    choice = c;
+    legal = c.legal;
+    tray.select(seat, c.selected, now);
+    _autoMove = c.forced;
+    _autoMoveAtMs = now + (spec.reducedMotion ? 0 : spec.tray.autoSpendMs);
+    phase = GamePhase.awaitingMove;
+  }
+
   void _startMove(Move move) {
     final before = state;
     final after = Engine.apply(before, move);
     final start = _now();
+    _autoMove = null;
+    if (banked) {
+      // The chip at the spent die's index flies to the token.
+      tray.spendAt(
+        before.currentSeat,
+        move.dieIndex,
+        resting[move.owner][move.tokenIndex],
+        start,
+      );
+      choice = null;
+    }
     final newPlan = MoveAnimationPlan.plan(
       before: before,
       after: after,
@@ -413,6 +691,12 @@ class GameController extends ChangeNotifier {
     _refreshLayout();
     legal = const [];
     _activate(state.currentSeat);
+    if (banked && !state.isOver && state.awaitingMove) {
+      // More dice to spend.
+      _enterMoving();
+      notifyListeners();
+      return;
+    }
     phase = state.isOver ? GamePhase.gameOver : GamePhase.awaitingRoll;
     if (phase == GamePhase.gameOver) {
       feedback.play(HapticEvent.win);

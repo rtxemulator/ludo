@@ -11,6 +11,7 @@ import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/seats/seats.dart';
 import 'package:ludo/ui/core/revert_plan.dart';
 
 import '../haptics/haptics_service.dart';
@@ -27,19 +28,22 @@ class DockToast {
   final double startMs;
 }
 
-/// Hot-seat game flow on top of the engine.
+/// Game flow on top of the engine, for the seats of a [MatchSetup].
 ///
 /// The engine owns all rules and state; this class only sequences
 /// `roll -> choose -> apply` and exposes timing for the painters. The UI
-/// never mutates [state] directly.
+/// never mutates [state] directly. Human seats act through taps; AI seats
+/// are driven from [tick] with a short think time so their rolls and moves
+/// stay readable.
 class GameController extends ChangeNotifier {
   GameController({
     RulesConfig rules = const RulesConfig(),
+    MatchSetup? setup,
     int? seed,
     double Function()? now,
     bool haptics = true,
     HapticsService? hapticsService,
-  })  : _rules = rules,
+  })  : _setup = setup ?? MatchSetup.hotSeat(rules: rules),
         _now = now ?? _stopwatchClock(),
         feedback = hapticsService ?? HapticsService() {
     feedback.enabled = haptics;
@@ -53,24 +57,46 @@ class GameController extends ChangeNotifier {
 
   static const BoardGeometry _geo = BoardGeometry();
 
-  RulesConfig _rules;
+  MatchSetup _setup;
   final double Function() _now;
+  static const GreedyBot _bot = GreedyBot();
+
+  /// Who sits where and who controls each seat.
+  MatchSetup get setup => _setup;
 
   /// The rules of the running match.
-  RulesConfig get rules => _rules;
+  RulesConfig get rules => _setup.rules;
 
   /// Whether banked ("stacking") dice rolls are on. Everything banked-only
   /// (roll tray, selection, revert) is inert when this is `false`.
-  bool get banked => _rules.bankedRolls;
+  bool get banked => _setup.rules.bankedRolls;
 
   /// Switches banked rolls on or off; a change starts a new game.
   void setBankedRolls(bool on) {
-    if (_rules.bankedRolls == on) {
+    if (_setup.rules.bankedRolls == on) {
       return;
     }
-    _rules = _rules.copyWith(bankedRolls: on);
+    _setup = _setup.withRules(_setup.baseRules.copyWith(bankedRolls: on));
     newGame();
   }
+
+  /// Whether [seat] is played by the computer.
+  bool isAi(int seat) => _setup.typeOf(seat) == SeatType.ai;
+
+  /// Whether the computer is the one to roll or choose now.
+  bool get aiTurn =>
+      (phase == GamePhase.awaitingRoll || phase == GamePhase.awaitingMove) &&
+      isAi(state.currentSeat);
+
+  /// Think time before an AI seat rolls, and before it picks a move (ms).
+  static const double aiRollDelayMs = 700;
+  static const double aiMoveDelayMs = 650;
+
+  /// Reduced motion shortens the think time.
+  static const double aiReducedDelayMs = 250;
+
+  /// When the AI acts next (frame-clock ms); `null` while nothing is due.
+  double? _aiDueMs;
 
   /// Haptic feedback (native channel); `feedback.enabled` is the global
   /// toggle.
@@ -195,7 +221,8 @@ class GameController extends ChangeNotifier {
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
-    state = Engine.newGame(seed: s, rules: _rules);
+    state = _setup.newGame(s);
+    _aiDueMs = null;
     phase = GamePhase.awaitingRoll;
     legal = const [];
     lastRoll = null;
@@ -274,14 +301,19 @@ class GameController extends ChangeNotifier {
   void dockTap(int seat) {
     if (seat == activeSeat) {
       if (phase == GamePhase.awaitingRoll) {
-        roll();
+        if (aiTurn) {
+          // The computer rolls by itself.
+          pulseDock(seat);
+        } else {
+          roll();
+        }
         return;
       }
       if (phase == GamePhase.rolling) {
         quickRoll();
         return;
       }
-      if (banked && phase == GamePhase.awaitingMove) {
+      if (banked && phase == GamePhase.awaitingMove && !aiTurn) {
         // The live die is the roll button, but the bank has to be spent
         // first: it shakes, and so does the tray.
         final now = _now();
@@ -316,6 +348,9 @@ class GameController extends ChangeNotifier {
   /// while a token is to be chosen, a tap on a token that cannot move nudges
   /// it (with a faint red ring and a double tick).
   bool tapAt(Pt grid) {
+    if (aiTurn) {
+      return false;
+    }
     if (phase == GamePhase.awaitingRoll) {
       pulseDock(diceSeat);
       return false;
@@ -391,6 +426,7 @@ class GameController extends ChangeNotifier {
     if (!banked ||
         phase != GamePhase.awaitingMove ||
         c == null ||
+        aiTurn ||
         seat != state.currentSeat) {
       return;
     }
@@ -409,6 +445,7 @@ class GameController extends ChangeNotifier {
       banked &&
       phase == GamePhase.awaitingMove &&
       choice != null &&
+      !aiTurn &&
       seat == state.currentSeat;
 
   /// Tokens whose glow is drawn: the moves of the selected chip (every legal
@@ -514,6 +551,34 @@ class GameController extends ChangeNotifier {
       // The confetti is over: let the screen stop the ticker.
       _tickerStopNotified = true;
       notifyListeners();
+    }
+    _driveAi(now);
+  }
+
+  /// Lets an AI seat roll and choose: after a short think time it presses the
+  /// same buttons a person would, so the animations, haptics and rules flow
+  /// are identical for both.
+  void _driveAi(double now) {
+    if (!aiTurn) {
+      _aiDueMs = null;
+      return;
+    }
+    if (phase == GamePhase.awaitingMove && _autoMove != null) {
+      // A forced spend of the bank goes by itself.
+      return;
+    }
+    final slow =
+        phase == GamePhase.awaitingRoll ? aiRollDelayMs : aiMoveDelayMs;
+    final due =
+        _aiDueMs ??= now + (spec.reducedMotion ? aiReducedDelayMs : slow);
+    if (now < due) {
+      return;
+    }
+    _aiDueMs = null;
+    if (phase == GamePhase.awaitingRoll) {
+      roll();
+    } else if (legal.isNotEmpty) {
+      _startMove(_bot.choose(state, legal));
     }
   }
 

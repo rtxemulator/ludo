@@ -11,6 +11,8 @@ Specs live in docs/. Start with docs/ludo-roadmap.md.
 
 ## Status
 
+- Milestone 3 (seat configuration) is implemented on branch `milestone-3-seats`; spec in docs/ludo-seats.md. Pure Dart in `lib/seats/` (`SeatConfig`, `MatchSetup`, `RulesPreset`, `GreedyBot`; imports only `package:ludo/engine/ludo_engine.dart`, guarded by `test/seats/seats_purity_test.dart` and a CI grep). App: `app/lib/ui/setup/` (`SetupScreen`, `SeatMap`), `GameController(setup:)` drives AI seats from `tick` (`aiTurn`, `_driveAi`) and ignores taps on AI turns; empty seats have no dock and a veiled yard; the game menu has "Players & rules". Awaiting CI and the device review.
+
 - Milestone 1 (pure Dart engine + tests) is DONE. Next: Milestone 2 (board UI & animations). Animation curves/shaders are planned in docs/ludo-animation.md. Pure-Dart motion/geometry core lives in lib/ui/core/ (no Flutter imports); the Flutter layer needs an SDK toolchain decision first.
 
 ## Engine notes (lib/engine/)

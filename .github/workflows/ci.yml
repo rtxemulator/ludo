@@ -27,6 +27,13 @@ jobs:
             exit 1
           fi
 
+      - name: Seats purity (no Flutter imports)
+        run: |
+          if grep -rn "package:flutter" lib/seats/; then
+            echo "::error::lib/seats/ must never import Flutter"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: dart pub get
 

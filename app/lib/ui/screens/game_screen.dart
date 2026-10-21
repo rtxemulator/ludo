@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:ludo/seats/seats.dart';
+
 import '../../game/game_controller.dart';
 import '../../settings/game_settings.dart';
 import '../table/table_view.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
 
-/// Hot-seat game screen (Milestone 2): just the table. There is no status
-/// text; the board and the docks are the HUD.
+/// The game screen: just the table. There is no status text; the board and
+/// the docks are the HUD. Seats come from [setup] (humans tap, AI seats play
+/// by themselves).
 class GameScreen extends StatefulWidget {
-  /// [controller] is injectable for tests; when omitted the screen owns one.
-  const GameScreen({super.key, this.controller, this.settings});
+  /// [controller] is injectable for tests; when omitted the screen owns one,
+  /// built for [setup] (four humans when that is omitted too).
+  const GameScreen({super.key, this.controller, this.settings, this.setup});
 
   final GameController? controller;
+
+  /// The seats and rules to play; ignored when a [controller] is given.
+  final MatchSetup? setup;
 
   /// Injectable for tests; when omitted the screen owns one.
   final GameSettings? settings;
@@ -23,7 +30,8 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
-  late final GameController _game = widget.controller ?? GameController();
+  late final GameController _game =
+      widget.controller ?? GameController(setup: widget.setup);
   late final GameSettings _settings =
       widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
   bool _systemReduced = false;
@@ -35,6 +43,9 @@ class _GameScreenState extends State<GameScreen>
   void initState() {
     super.initState();
     _ticker = createTicker((_) => _game.tick());
+    // Settings outlive a match (they belong to the app): apply them to this
+    // one before the first frame.
+    _game.feedback.enabled = _settings.haptics;
     _game.addListener(_syncTicker);
     _settings.addListener(_onSettings);
     _syncTicker();
@@ -98,6 +109,10 @@ class _GameScreenState extends State<GameScreen>
           settings: _settings,
           palette: palette,
           shaders: _shaders!,
+          // Back to the setup screen, when this screen was opened from it.
+          onSetup: Navigator.of(context).canPop()
+              ? () => Navigator.of(context).pop()
+              : null,
         ),
       ),
     );

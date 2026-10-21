@@ -2,7 +2,7 @@
 
 Master architectural blueprint for the Android-first Flutter Ludo project.
 
-Related: [ludo-rules.md](ludo-rules.md), [ludo-engine-tests.md](ludo-engine-tests.md), [ludo-roadmap.md](ludo-roadmap.md)
+Related: [ludo-seats.md](ludo-seats.md), [ludo-rules.md](ludo-rules.md), [ludo-engine-tests.md](ludo-engine-tests.md), [ludo-roadmap.md](ludo-roadmap.md)
 
 ---
 
@@ -42,7 +42,7 @@ lib/
     engine.dart         # legalMoves(state, dice), apply(state, move)
     dice.dart           # Seeded PRNG and commit-reveal helper
   ai/         # Runs entirely in a background isolate
-  seats/      # Human / AI / Remote seat controllers
+  seats/      # PURE Dart: SeatConfig, MatchSetup, presets, GreedyBot (see ludo-seats.md)
   storage/    # drift database, save/load, move log serialization
   net/        # WebRTC + Nearby Connections message protocols
   ui/         # Screens, CustomPainter board, token animations

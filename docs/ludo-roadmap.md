@@ -17,9 +17,9 @@ Each milestone ends with passing automated tests, manual verification, and a Git
    - Single device, local hot-seat mode.
    - `CustomPainter` board rendering with layer caching.
    - Token hop, landing squash, capture shake, and glowing legal move animations.
-3. **Milestone 3 - Seat Configuration:**
+3. **Milestone 3 - Seat Configuration:** (implemented, see ludo-seats.md)
    - Dynamic 2, 3, and 4 player setup screens.
-   - 2v2 team configuration and slot assignment (Human / AI / Remote).
+   - 2v2 team configuration and slot assignment (Human / AI / Remote). Remote is modelled but not selectable until Milestone 8; AI seats play the `GreedyBot` baseline until Milestone 4.
 4. **Milestone 4 - AI Engine:**
    - Background isolate execution to guarantee 60 fps main thread UI.
    - Difficulty levels (Easy, Medium, Hard, Expert expectiminimax / MCTS).

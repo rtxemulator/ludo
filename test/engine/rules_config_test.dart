@@ -16,6 +16,7 @@ void main() {
       expect(rules.exactRollToFinish, isTrue);
       expect(rules.blockades, isFalse);
       expect(rules.teamsEnabled, isFalse);
+      expect(rules.bankedRolls, isFalse);
     });
 
     test('classic preset equals the defaults', () {

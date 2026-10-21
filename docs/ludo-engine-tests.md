@@ -92,3 +92,18 @@ test('10,000 random playouts property invariant test', () {
   // 3. Invariant: Total token count per seat strictly equals 4 at every tick.
 });
 ```
+
+---
+
+## 7. Banked Rolls Unit Tests (`test/engine/banked_rolls_test.dart`)
+
+Covers `bankedRolls: true` (see `ludo-rules.md` section 8). Dice are seeded: tests pick a PRNG state that yields an exact sequence (`findRngState`, `rollSequence`) or build a moving-phase state with an explicit bank.
+
+- **Rolling phase:** a 6 is banked with an immediate extra roll and nothing moves; a 1-5 ends the sequence and snapshots the turn; a lone 1-5 ends at once; `6,6,x` is not a forfeit; `tripleSixForfeit: false` keeps banking; `extraTurnOnSix: false` makes a 6 end the sequence.
+- **Triple-six wipe:** three 6s wipe the whole bank including earlier dice, pass the turn and leave the board untouched.
+- **Order flexibility:** `6,6,4` spent in different orders and across tokens reaches the same board; any equal-value `dieIndex` works; only moves that leave the rest of the bank spendable are legal (a `3` cannot be spent before the `6` that exits the yard); no moves outside the moving phase.
+- **All-or-nothing:** a bank that cannot be spent in full from the start is forfeited (tokens unchanged, bank cleared, turn passes); a dead end after a bonus roll reverts the capture that earned it; a move that ends the match is legal only as the last die.
+- **Bonus sequences:** bonus dice are added to a non-empty bank (`6,6,x` -> `6,6,6,6,y`); older 6s do not count toward the bonus sequence; the counter is `0` at each bonus sequence start; a triple six in a bonus sequence wipes the bank, passes the turn and keeps the moves (capture included); several captures/home moves each grant their own sequence in one turn; `extraTurnOnCapture: false` grants none.
+- **Bank lifecycle:** the bank, phase and snapshot are cleared when the turn passes; state equality covers bank, phase and snapshot; `nextDecision` rolls through a whole sequence.
+- **Regression:** `bankedRolls` is `false` in the defaults and every preset; with it off a roll sets the single pending die, never touches the bank, and the triple-six forfeit is unchanged.
+- **Playout:** 600 random banked playouts across Classic and Strategic setups (all layouts and end modes) check the bank invariants (no pending die, non-6 dice only after the sequence ends, no bank on game over), termination and exact replay from the move log.

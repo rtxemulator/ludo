@@ -72,6 +72,9 @@ class DockLayout {
     required this.dieCenter,
     required this.dieSize,
     required this.edge,
+    required this.tray,
+    required this.chipSize,
+    required this.trayOuter,
   });
 
   final int seat;
@@ -83,6 +86,27 @@ class DockLayout {
 
   /// Table edge this seat faces.
   final SeatEdge edge;
+
+  /// Where the banked-roll chips sit (UI/UX doc section 10), pixels. It is
+  /// a strip beyond the dock on the player's side ([trayOuter]) when the
+  /// margin has room, otherwise the strip of the dock between the die and the
+  /// player's edge.
+  final Box tray;
+
+  /// Chip edge length in pixels.
+  final double chipSize;
+
+  /// Whether [tray] lies outside [rect] (it never overlaps the dock then).
+  final bool trayOuter;
+
+  /// The tray's length along the table edge, in chips.
+  double get trayCapacity => _alongOf(tray, edge) / chipSize;
+
+  /// Tray centre in table space.
+  Pt get trayCenter => tray.center;
+
+  static double _alongOf(Box b, SeatEdge edge) =>
+      edge == SeatEdge.top || edge == SeatEdge.bottom ? b.width : b.height;
 }
 
 /// Pure layout of the table for a screen of [width] x [height] pixels.
@@ -113,6 +137,14 @@ class TableLayout {
 
   /// Gap between a dock and the board frame (cells).
   static const double gapCells = 0.15;
+
+  /// Roll tray (banked rolls): chip edge, strip depth and length along the
+  /// table edge, gap to the dock, and the least outside room worth using.
+  static const double chipCells = 1.1;
+  static const double trayDepthCells = 1.5;
+  static const double trayAlongCells = 6.0;
+  static const double trayGapCells = 0.1;
+  static const double trayMinOuterCells = 1.0;
 
   /// Menu button edge, pixels (a comfortable touch target).
   static const double menuPx = 44;
@@ -216,6 +248,15 @@ class TableLayout {
           rect = Box.centered(Pt(cx, cy), s, s);
           dieSize = 1.4 * cell;
       }
+      final tray = _trayFor(
+        placement: placement,
+        edge: edges[seat],
+        rect: rect,
+        dieSize: dieSize,
+        cell: cell,
+        width: width,
+        height: height,
+      );
       docks.add(
         DockLayout(
           seat: seat,
@@ -223,6 +264,9 @@ class TableLayout {
           dieCenter: rect.center,
           dieSize: dieSize,
           edge: edges[seat],
+          tray: tray.box,
+          chipSize: tray.chip,
+          trayOuter: tray.outer,
         ),
       );
     }
@@ -248,6 +292,63 @@ class TableLayout {
       menu: Box.centered(menuCenter, menuSize, menuSize),
       placement: placement,
     );
+  }
+
+  /// The roll tray of one dock: the strip beyond the dock on the player's
+  /// side if the margin has [trayMinOuterCells] to spare, otherwise the strip
+  /// of the dock between the die and the player's edge.
+  static ({Box box, double chip, bool outer}) _trayFor({
+    required DockPlacement placement,
+    required SeatEdge edge,
+    required Box rect,
+    required double dieSize,
+    required double cell,
+    required double width,
+    required double height,
+  }) {
+    final horizontalEdge = edge == SeatEdge.top || edge == SeatEdge.bottom;
+    final gap = trayGapCells * cell;
+    final room = switch (edge) {
+      SeatEdge.bottom => height - rect.bottom,
+      SeatEdge.top => rect.top,
+      SeatEdge.left => rect.left,
+      SeatEdge.right => width - rect.right,
+    };
+    final outerDepth = room - gap;
+    if (placement != DockPlacement.inYard &&
+        outerDepth >= trayMinOuterCells * cell) {
+      final depth = outerDepth < trayDepthCells * cell
+          ? outerDepth
+          : trayDepthCells * cell;
+      final along = trayAlongCells * cell;
+      final c = rect.center;
+      final box = switch (edge) {
+        SeatEdge.bottom =>
+          Box(c.x - along / 2, rect.bottom + gap, along, depth),
+        SeatEdge.top =>
+          Box(c.x - along / 2, rect.top - gap - depth, along, depth),
+        SeatEdge.left =>
+          Box(rect.left - gap - depth, c.y - along / 2, depth, along),
+        SeatEdge.right => Box(rect.right + gap, c.y - along / 2, depth, along),
+      };
+      return (box: box, chip: _chipFor(cell, depth), outer: true);
+    }
+    // Inside the dock: the strip between the die and the player's edge.
+    final dockDepth = horizontalEdge ? rect.height : rect.width;
+    final depth = (dockDepth - dieSize) / 2;
+    final box = switch (edge) {
+      SeatEdge.bottom => Box(rect.left, rect.bottom - depth, rect.width, depth),
+      SeatEdge.top => Box(rect.left, rect.top, rect.width, depth),
+      SeatEdge.left => Box(rect.left, rect.top, depth, rect.height),
+      SeatEdge.right => Box(rect.right - depth, rect.top, depth, rect.height),
+    };
+    return (box: box, chip: _chipFor(cell, depth), outer: false);
+  }
+
+  static double _chipFor(double cell, double depth) {
+    final byDepth = depth * 0.8;
+    final preferred = chipCells * cell;
+    return byDepth < preferred ? byDepth : preferred;
   }
 
   static double _depth(double cell, double marginCells) {

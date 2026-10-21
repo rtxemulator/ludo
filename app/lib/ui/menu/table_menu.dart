@@ -145,8 +145,17 @@ class _TableMenuState extends State<TableMenu> {
       children: [
         _header('Rules'),
         const Padding(
-          padding: EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
           child: Text('The rule presets and house rules will be listed here.'),
+        ),
+        SwitchListTile(
+          title: const Text('Banked rolls'),
+          subtitle: const Text(
+            'Sixes stack: roll them all, then spend the whole bank. '
+            'Changing this starts a new game.',
+          ),
+          value: _game.banked,
+          onChanged: _game.setBankedRolls,
         ),
       ],
     );

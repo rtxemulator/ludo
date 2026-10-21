@@ -154,9 +154,13 @@ class DockPainter extends CustomPainter {
     // Ground position on screen: dock centre + the dock-local offset turned
     // to this seat.
     // A roll with no legal move makes the die shake sideways (dock-local x).
-    final shake = seat == game.rollerSeat
+    var shake = seat == game.rollerSeat
         ? dieShakeOffset(now, game.noMoveMs, spec)
         : 0.0;
+    // Banked rolls: a tap on the die while the bank is to be spent.
+    if (seat == active) {
+      shake += dieShakeOffset(now, game.bankShakeMs, spec);
+    }
     final local = rotateQuarterTurns(
       Pt((pose.offset.x + shake) * cell, pose.offset.y * cell),
       turns,
@@ -165,7 +169,10 @@ class DockPainter extends CustomPainter {
       dock.dieCenter.x + local.x,
       dock.dieCenter.y + local.y,
     );
-    final alpha = look.opacity * pose.opacity;
+    // Banked rolls: while the bank is spent the die cannot be rolled.
+    final locked =
+        game.banked && game.phase == GamePhase.awaitingMove && seat == active;
+    final alpha = look.opacity * pose.opacity * (locked ? 0.6 : 1.0);
     final edge = dock.dieSize * pose.scale * look.scale;
 
     // Halos: idle (waiting to be rolled) and the six flash.

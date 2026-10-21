@@ -95,8 +95,29 @@ void _checkInvariants(GameState state, String context) {
     }
   }
 
-  if (state.isOver) {
+  // Banked-dice bookkeeping.
+  if (state.rules.bankedRolls) {
     if (state.dice != null) {
+      fail('banked rules must never set a pending die');
+    }
+    if (state.bankPhase == BankPhase.moving && state.turnSnapshot == null) {
+      fail('moving phase without a snapshot');
+    }
+    if (state.bank.any((d) => d < 1 || d > 6)) {
+      fail('bank holds a non-die value');
+    }
+    if (state.bank.isNotEmpty &&
+        state.bankPhase == BankPhase.rolling &&
+        state.turnSnapshot == null &&
+        state.bank.any((d) => d != 6)) {
+      fail('a non-6 in the bank before the moving phase');
+    }
+  } else if (state.bank.isNotEmpty || state.turnSnapshot != null) {
+    fail('bank state without bankedRolls');
+  }
+
+  if (state.isOver) {
+    if (state.dice != null || state.bank.isNotEmpty) {
       fail('dice pending after the game ended');
     }
     if (state.rules.endMode == EndMode.fullRanking &&
@@ -152,6 +173,42 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 15)),
   );
+
+  test('banked-dice playouts never break an engine invariant', () {
+    final banked = [
+      for (final setup in setups)
+        if (setup.name.startsWith('classic/') ||
+            setup.name.startsWith('strategic/'))
+          _Setup(
+            'banked ${setup.name}',
+            setup.rules.copyWith(bankedRolls: true),
+            setup.seats,
+          ),
+    ];
+    const games = 600;
+    for (var game = 0; game < games; game++) {
+      final setup = banked[game % banked.length];
+      final seed = 5000 + game;
+      final context = 'game $game (${setup.name}, seed $seed)';
+      final result = playOut(
+        seed: seed,
+        chooser: Random(game),
+        rules: setup.rules,
+        activeSeats: setup.seats,
+        onState: (s) => _checkInvariants(s, context),
+      );
+      expect(result.finished, isTrue, reason: '$context did not finish');
+      if (game % 10 == 0) {
+        final replayed = Engine.replay(
+          seed: seed,
+          log: result.log,
+          rules: setup.rules,
+          activeSeats: setup.seats,
+        );
+        expect(replayed, result.state, reason: '$context replay');
+      }
+    }
+  }, timeout: const Timeout(Duration(minutes: 10)));
 
   test('every setup is exercised and covers all end modes', () {
     expect(setups, hasLength(30));

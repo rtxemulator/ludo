@@ -1,6 +1,49 @@
 import 'board.dart';
 import 'rules_config.dart';
 
+/// Phase of a banked-dice turn (`RulesConfig.bankedRolls`).
+enum BankPhase {
+  /// The seat is rolling dice into the bank (also the phase between turns and
+  /// during a bonus rolling sequence).
+  rolling,
+
+  /// The roll sequence ended; the bank is spent one die at a time.
+  moving,
+}
+
+/// Board and bank as they were when the moving phase of a banked turn began.
+///
+/// A dead end (the whole bank cannot be spent) reverts the turn to this.
+class TurnSnapshot {
+  TurnSnapshot({
+    required List<List<int>> tokens,
+    required List<int> finishOrder,
+    required List<int> bank,
+  })  : tokens = List.unmodifiable(tokens.map(List<int>.unmodifiable)),
+        finishOrder = List.unmodifiable(finishOrder),
+        bank = List.unmodifiable(bank);
+
+  final List<List<int>> tokens;
+  final List<int> finishOrder;
+
+  /// The bank when the moving phase started.
+  final List<int> bank;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TurnSnapshot &&
+      _listEquals(other.finishOrder, finishOrder) &&
+      _listEquals(other.bank, bank) &&
+      _tokensEqual(other.tokens, tokens);
+
+  @override
+  int get hashCode => Object.hash(
+        Object.hashAll(finishOrder),
+        Object.hashAll(bank),
+        Object.hashAll(tokens.expand((seat) => seat)),
+      );
+}
+
 /// Immutable snapshot of a Ludo match.
 ///
 /// Create new matches with `Engine.newGame`; derive successors only through
@@ -16,9 +59,13 @@ class GameState {
     this.consecutiveSixes = 0,
     this.turnNumber = 0,
     List<int> finishOrder = const [],
+    List<int> bank = const [],
+    this.bankPhase = BankPhase.rolling,
+    this.turnSnapshot,
   })  : tokens = List.unmodifiable(tokens.map(List<int>.unmodifiable)),
         activeSeats = List.unmodifiable(activeSeats),
-        finishOrder = List.unmodifiable(finishOrder);
+        finishOrder = List.unmodifiable(finishOrder),
+        bank = List.unmodifiable(bank);
 
   const GameState._trusted({
     required this.tokens,
@@ -30,6 +77,9 @@ class GameState {
     required this.consecutiveSixes,
     required this.turnNumber,
     required this.finishOrder,
+    required this.bank,
+    required this.bankPhase,
+    required this.turnSnapshot,
   });
 
   /// `tokens[seat][i]` is the relative position of token `i` of `seat`.
@@ -59,6 +109,23 @@ class GameState {
   /// unfinished seat(s) are appended automatically when the match ends.
   final List<int> finishOrder;
 
+  /// Banked dice of the current turn, in the order rolled (empty unless
+  /// `rules.bankedRolls`). Cleared whenever the turn passes, so only
+  /// [currentSeat] ever holds dice; see [bankOf].
+  final List<int> bank;
+
+  /// Whether the current banked turn is still rolling or already spending.
+  /// Meaningless when `rules.bankedRolls` is off.
+  final BankPhase bankPhase;
+
+  /// Board and bank when this turn's moving phase began, or `null` before it
+  /// started (and when `rules.bankedRolls` is off).
+  final TurnSnapshot? turnSnapshot;
+
+  /// The banked dice held by [seat]: [bank] for the current seat, otherwise
+  /// empty.
+  List<int> bankOf(int seat) => seat == currentSeat ? bank : const [];
+
   GameState copyWith({
     List<List<int>>? tokens,
     int? currentSeat,
@@ -68,6 +135,10 @@ class GameState {
     int? rngState,
     int? turnNumber,
     List<int>? finishOrder,
+    List<int>? bank,
+    BankPhase? bankPhase,
+    TurnSnapshot? turnSnapshot,
+    bool clearSnapshot = false,
   }) {
     return GameState._trusted(
       tokens: tokens == null
@@ -83,6 +154,9 @@ class GameState {
       finishOrder: finishOrder == null
           ? this.finishOrder
           : List.unmodifiable(finishOrder),
+      bank: bank == null ? this.bank : List.unmodifiable(bank),
+      bankPhase: bankPhase ?? this.bankPhase,
+      turnSnapshot: clearSnapshot ? null : (turnSnapshot ?? this.turnSnapshot),
     );
   }
 
@@ -131,8 +205,17 @@ class GameState {
     return rules.endMode == EndMode.firstToWin ? anyFinished : unfinished <= 1;
   }
 
-  /// Whether a die roll is due.
-  bool get awaitingRoll => dice == null && !isOver;
+  /// Whether a die roll is due (with banked rolls: the seat is in the rolling
+  /// phase of its turn or of a bonus sequence).
+  bool get awaitingRoll => rules.bankedRolls
+      ? bankPhase == BankPhase.rolling && !isOver
+      : dice == null && !isOver;
+
+  /// Whether a move decision is due: a pending die, or (banked rolls) the
+  /// moving phase with dice left to spend.
+  bool get awaitingMove => rules.bankedRolls
+      ? bankPhase == BankPhase.moving && bank.isNotEmpty && !isOver
+      : dice != null && !isOver;
 
   /// Seat whose tokens move on this turn. Normally [currentSeat]; with
   /// teammate control a finished player moves their partner's tokens.
@@ -200,11 +283,14 @@ class GameState {
         other.dice != dice ||
         other.consecutiveSixes != consecutiveSixes ||
         other.rngState != rngState ||
-        other.turnNumber != turnNumber) {
+        other.turnNumber != turnNumber ||
+        other.bankPhase != bankPhase ||
+        other.turnSnapshot != turnSnapshot) {
       return false;
     }
     return _listEquals(other.activeSeats, activeSeats) &&
         _listEquals(other.finishOrder, finishOrder) &&
+        _listEquals(other.bank, bank) &&
         _tokensEqual(other.tokens, tokens);
   }
 
@@ -219,12 +305,16 @@ class GameState {
         Object.hashAll(activeSeats),
         Object.hashAll(finishOrder),
         Object.hashAll(tokens.expand((seat) => seat)),
+        Object.hashAll(bank),
+        bankPhase,
+        turnSnapshot,
       );
 
   @override
   String toString() => 'GameState(turn $turnNumber, seat $currentSeat, '
       'dice $dice, sixes $consecutiveSixes, tokens $tokens, '
-      'finishOrder $finishOrder)';
+      'finishOrder $finishOrder'
+      '${rules.bankedRolls ? ', bank $bank ${bankPhase.name}' : ''})';
 }
 
 bool _listEquals(List<int> a, List<int> b) {

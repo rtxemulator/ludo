@@ -20,6 +20,9 @@ GameState makeState({
   int rngState = 1,
   int turnNumber = 0,
   List<int> finishOrder = const [],
+  List<int> bank = const [],
+  BankPhase bankPhase = BankPhase.rolling,
+  TurnSnapshot? turnSnapshot,
 }) {
   return GameState(
     tokens: [
@@ -33,6 +36,9 @@ GameState makeState({
     rngState: rngState,
     turnNumber: turnNumber,
     finishOrder: finishOrder,
+    bank: bank,
+    bankPhase: bankPhase,
+    turnSnapshot: turnSnapshot,
   );
 }
 
@@ -68,7 +74,7 @@ bool canMove(GameState state, int tokenIndex, [int? dice]) =>
 
 /// Finds a PRNG state whose next rolls are exactly [sequence].
 int findRngState(List<int> sequence) {
-  for (var candidate = 0; candidate < 1000000; candidate++) {
+  for (var candidate = 0; candidate < 5000000; candidate++) {
     var state = candidate;
     var ok = true;
     for (final expected in sequence) {
@@ -122,11 +128,13 @@ PlayResult playOut({
     if (steps++ >= maxSteps) {
       return PlayResult(state, log, afterMoves, steps, false);
     }
-    final rolled = Engine.roll(state);
-    state = rolled.state;
-    onState?.call(state);
-    if (rolled.outcome != RollOutcome.awaitingMove) {
-      continue;
+    if (!state.awaitingMove) {
+      final rolled = Engine.roll(state);
+      state = rolled.state;
+      onState?.call(state);
+      if (rolled.outcome != RollOutcome.awaitingMove) {
+        continue;
+      }
     }
     final moves = Engine.legalMoves(state);
     final move = moves[chooser.nextInt(moves.length)];
@@ -137,3 +145,46 @@ PlayResult playOut({
   }
   return PlayResult(state, log, afterMoves, steps, true);
 }
+
+/// Banked-rules variant of [makeState]: a state in the moving phase holding
+/// [bank], with a snapshot of the board it started from.
+GameState makeMoving({
+  required List<int> bank,
+  RulesConfig rules = const RulesConfig(bankedRolls: true),
+  Map<int, List<int>> tokens = const {},
+  int currentSeat = 0,
+  List<int> activeSeats = allSeats,
+}) {
+  final base = makeState(
+    rules: rules,
+    tokens: tokens,
+    currentSeat: currentSeat,
+    activeSeats: activeSeats,
+  );
+  return base.copyWith(
+    bank: bank,
+    bankPhase: BankPhase.moving,
+    turnSnapshot: TurnSnapshot(
+      tokens: base.tokens,
+      finishOrder: base.finishOrder,
+      bank: bank,
+    ),
+  );
+}
+
+/// Rolls once per value in [values] after seeding the PRNG so the dice come
+/// out exactly as listed; returns every [RollResult] in order.
+List<RollResult> rollSequence(GameState state, List<int> values) {
+  var current = state.copyWith(rngState: findRngState(values));
+  final results = <RollResult>[];
+  for (final _ in values) {
+    final result = Engine.roll(current);
+    results.add(result);
+    current = result.state;
+  }
+  return results;
+}
+
+/// [state] with the PRNG seeded so the next rolls are exactly [values].
+GameState withDice(GameState state, List<int> values) =>
+    state.copyWith(rngState: findRngState(values));

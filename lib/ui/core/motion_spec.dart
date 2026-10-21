@@ -78,7 +78,11 @@ class MotionSpec {
     this.toastMs = 1200,
     this.toastFadeMs = 180,
     this.rankBadgeMs = 450,
+    this.revertMs = 380,
+    this.revertArc = 0.5,
+    this.revertStaggerMs = 40,
     this.dice3d = const Dice3dSpec(),
+    this.tray = const TraySpec(),
   });
 
   /// Starting values from the plan.
@@ -202,8 +206,109 @@ class MotionSpec {
   /// Game-over rank badge pop-in.
   final double rankBadgeMs;
 
+  /// A banked-rolls dead end: every token of the turn glides back to where
+  /// it started (one glide of [revertMs] with an [revertArc] cell arc, the
+  /// next token [revertStaggerMs] later).
+  final double revertMs;
+  final double revertArc;
+  final double revertStaggerMs;
+
   /// Numbers of the 3D dice roll.
   final Dice3dSpec dice3d;
+
+  /// Numbers of the banked-roll tray (docs/ludo-ui-ux.md section 10).
+  final TraySpec tray;
+}
+
+/// Timing and size of the banked-roll tray: the die chips beside a dock.
+///
+/// Times are milliseconds, sizes are in chip edges (one chip = `1`).
+class TraySpec {
+  const TraySpec({
+    this.popMs = 200,
+    this.popFromScale = 0.4,
+    this.slideMs = 160,
+    this.selectMs = 120,
+    this.selectedScale = 1.18,
+    this.spendMs = 300,
+    this.spendEndScale = 0.5,
+    this.spendDissolveFrom = 0.65,
+    this.spendArc = 0.35,
+    this.wipeMs = 340,
+    this.wipeStaggerMs = 45,
+    this.wipeShake = 0.12,
+    this.wipeEndScale = 1.3,
+    this.revertMs = 300,
+    this.revertStaggerMs = 30,
+    this.revertEndScale = 0.6,
+    this.promptMs = 360,
+    this.promptScale = 0.12,
+    this.shakeMs = 300,
+    this.shakeAmplitude = 0.16,
+    this.shakeCycles = 3,
+    this.shakeDecay = 3,
+    this.autoSpendMs = 280,
+    this.chipGap = 0.12,
+    this.fanTilt = 0.06,
+    this.fanMaxTilt = 0.3,
+    this.fanSag = 0.04,
+    this.dimOpacity = 0.45,
+  });
+
+  /// A new chip pops in: grows from [popFromScale], overshoots, settles.
+  final double popMs;
+  final double popFromScale;
+
+  /// The other chips glide to their new slots over this long.
+  final double slideMs;
+
+  /// A chip lifts to [selectedScale] (and glows) over [selectMs].
+  final double selectMs;
+  final double selectedScale;
+
+  /// A spent chip flies to its token over [spendMs], shrinking to
+  /// [spendEndScale] and dissolving over the last `1 - spendDissolveFrom`
+  /// of the flight; [spendArc] is its extra (scale) height mid-flight.
+  final double spendMs;
+  final double spendEndScale;
+  final double spendDissolveFrom;
+  final double spendArc;
+
+  /// Triple-six wipe: each chip shakes then bursts (grows to [wipeEndScale]
+  /// while fading) over [wipeMs]; chips start [wipeStaggerMs] apart.
+  final double wipeMs;
+  final double wipeStaggerMs;
+  final double wipeShake;
+  final double wipeEndScale;
+
+  /// Dead-end revert: chips shrink and fade over [revertMs].
+  final double revertMs;
+  final double revertStaggerMs;
+  final double revertEndScale;
+
+  /// "Pick a die" prompt: every chip swells by [promptScale] and back.
+  final double promptMs;
+  final double promptScale;
+
+  /// Whole-tray sideways shake (bank-full tap, tap on an unplayable chip).
+  final double shakeMs;
+  final double shakeAmplitude;
+  final double shakeCycles;
+  final double shakeDecay;
+
+  /// A forced single move is spent this long after its chip appeared, so
+  /// the chip is seen first.
+  final double autoSpendMs;
+
+  /// Gap between chips in the row, and the fan: tilt per slot (radians,
+  /// capped by [fanMaxTilt]) and the sag of the outer chips.
+  final double chipGap;
+  final double fanTilt;
+  final double fanMaxTilt;
+  final double fanSag;
+
+  /// Opacity of a chip that cannot be spent right now.
+  final double dimOpacity;
 }
 
 /// Timing and size of the 3D dice roll (docs/ludo-ui-ux.md section 4.2).

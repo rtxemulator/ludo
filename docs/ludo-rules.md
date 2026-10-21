@@ -27,6 +27,7 @@ class RulesConfig {
   final bool exactRollToFinish;   // default: true (token must hit square 56 exactly)
   final bool blockades;           // default: false (2+ tokens stack into impassable block)
   final bool teamsEnabled;        // derived from SeatConfig
+  final bool bankedRolls;         // default: false (stacking dice, see section 8)
 
   const RulesConfig({
     this.endMode = EndMode.fullRanking,
@@ -39,6 +40,7 @@ class RulesConfig {
     this.exactRollToFinish = true,
     this.blockades = false,
     this.teamsEnabled = false,
+    this.bankedRolls = false,
   });
 }
 ```
@@ -125,3 +127,58 @@ class RulesConfig {
 | **Classic (Default)** | All defaults specified above. | Balanced, standard tournament Ludo rules. |
 | **Quick** | `needSixToLeave: false`<br>`tripleSixForfeit: false`<br>`endMode: EndMode.firstToWin` | Fast-paced, casual mobile session (tokens leave on 1-6). |
 | **Strategic** | `blockades: true`<br>`extraTurnOnCapture: false` | Deep tactical play with path blocking and controlled pacing. |
+
+All presets keep `bankedRolls: false`; banked rolls are an opt-in variant (section 8), not part of any preset.
+
+---
+
+## 8. Banked ("Stacking") Rolls (`bankedRolls: true`)
+
+Off by default; with `bankedRolls: false` everything above applies unchanged. When on, sections 3 (Turn Flow) and 6 (Teammate Control) are replaced by the rules below. Boards, captures, safe squares, blockades, end modes and teammate control otherwise work as before.
+
+### 8.1 Rolling without moving ("Roll All First")
+
+A turn starts by rolling dice into a **bank** without moving anything. A *rolling sequence* is a run of rolls:
+
+- A **6** is added to the bank and grants an immediate extra roll (the sequence continues).
+- A **1-5** is added to the bank and ends the sequence; the turn moves on to the moving phase.
+- **Three consecutive 6s in one sequence** wipe the **entire bank** (earlier dice included) and forfeit the turn. The third 6 is discarded. Moves already made this turn are kept (this only matters in a bonus sequence, see 8.3).
+- The consecutive-6s counter is per sequence: it is `0` at the start of the turn and of every bonus sequence, and a 1-5 resets it to `0`. Sixes already in the bank never count toward a new sequence.
+- Rolling never checks for legal moves; a roll with no possible move is still banked.
+
+### 8.2 Moving phase: spend the bank, all-or-nothing
+
+- The player may spend the banked dice **in any order**, each on any eligible token of the controlled seat, with the usual movement rules (yard exit, exact finish, captures, blockades).
+- **All-or-nothing:** the player must be able to spend 100% of the bank in some order. A move is legal only if, after it, the remaining known dice can still all be spent (search over die orders and tokens).
+- When the moving phase begins the engine snapshots the board (tokens and `finishOrder`) and the bank. If the bank is non-empty and no legal move exists, the turn is **reverted** to the snapshot (captures and home moves undone), the bank is cleared and the turn passes. This also happens when a full spend is impossible from the very start. The PRNG is not rewound, so the dice already rolled are not rolled again.
+- A move that ends the match (`firstToWin`, or the last place in `fullRanking`) is legal only as the very last die of the bank. Winning with dice left over would leave dice unspent and is treated like any other dead end.
+- **No carry over:** the bank is cleared whenever the turn passes to the next seat, whether through spending the last die, a triple six or a dead end. Only the current seat ever holds banked dice.
+- Teammate control: the seat that rolled keeps the bank; each die is spent on the tokens of whichever seat is currently controlled (the finished roller's partner), including after a finishing move hands control over mid-turn.
+
+### 8.3 Captures and going home: bonus sequences
+
+- A move that **captures** an opponent token, or **lands a token on the finish square**, grants a **bonus rolling sequence** (subject to `extraTurnOnCapture` / `extraTurnOnHome`; if the seat has no one left to move it, no bonus is granted).
+- The bonus sequence is rolled **immediately, before the next spend**, with the consecutive-6s counter at `0`. Its dice are **added** to the remaining bank. Older 6s in the bank do not count toward the new sequence's counter.
+- A triple six inside a bonus sequence wipes the **entire bank** and passes the turn, but **moves already made this turn are kept**, including the capture that earned the bonus.
+- Every capture or home move grants its **own** bonus sequence, so several can happen in one turn.
+- The bonus dice are random, so a dead end can still appear after a bonus roll (the known dice were spendable, the new ones make the bank unspendable). That reverts the turn's moves to the snapshot, **including** the capture that earned the bonus.
+
+| Outcome | Bank | Moves made this turn | Turn |
+|---|---|---|---|
+| Triple six (first or bonus sequence) | wiped | **kept** | passes |
+| Dead end (full spend impossible) | cleared | **reverted** to the snapshot | passes |
+| Last die spent, no bonus | empty | kept | passes |
+
+### 8.4 No fixed bank size
+
+There is no cap on the bank. Example: bank `6,6,x` -> spend `x` to capture -> bonus roll `6,6,y` -> the bank is now `6,6,6,6,y`. (The two bonus 6s alone are not a triple six; a third bonus 6 would be.)
+
+### 8.5 Interaction with the other switches
+
+`extraTurnOnSix`, `tripleSixForfeit`, `extraTurnOnCapture` and `extraTurnOnHome` still gate their respective behaviour: without `extraTurnOnSix` a 6 is banked but ends the sequence like a 1-5; without `tripleSixForfeit` there is no wipe; without `extraTurnOnCapture` / `extraTurnOnHome` those moves grant no bonus sequence. `needSixToLeave` and `exactRollToFinish` shape which spends are possible, and hence dead ends.
+
+### 8.6 Engine representation
+
+- `GameState.bank` is the current seat's banked dice in the order rolled (`bankOf(seat)` returns it for the current seat and an empty list otherwise). `bankPhase` is `rolling` or `moving`. `turnSnapshot` holds the snapshot taken when the moving phase began. `dice` stays `null`.
+- `Move.dieIndex` is the index into `bank` of the die the move spends. Equal dice are interchangeable, so `legalMoves` offers one move per token and distinct value (using the first matching index) and `apply` accepts any index with that value.
+- The move log keeps `(seat, dice, tokenIndex)` where `dice` is the value spent. Rolling-only rolls, forfeits and reverts are reproduced from the seed.

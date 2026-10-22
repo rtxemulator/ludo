@@ -82,10 +82,9 @@ void main() {
       expect(after.tokens[1].take(2), everyElement(relativeFor(1, 8)));
     });
 
-    test(
-        'on the owner\'s own start square they do block (formed out of '
-        'the yard)', () {
-      // Seat 1's start square is absolute 13.
+    test('on a start square block nobody, not even for other seats', () {
+      // Seat 1's start square is absolute 13: a pair there is on a safe
+      // square, so it is no blockade.
       GameState atStart(int d) => makeState(
             rules: blockadeRules,
             tokens: {
@@ -94,27 +93,8 @@ void main() {
             },
             dice: d,
           );
-      expect(canMove(atStart(3), 0), isFalse); // lands on 13
-      expect(canMove(atStart(5), 0), isFalse); // passes 13
-      expect(canMove(atStart(2), 0), isTrue); // stops short of it
-    });
-
-    test(
-        'a pair of the owner forms from the yard square: two tokens leaving '
-        'the yard make a blockade at once', () {
-      final state = makeState(
-        rules: blockadeRules,
-        tokens: {
-          1: [0, -1, -1, -1],
-          0: [10, -1, -1, -1],
-        },
-        currentSeat: 1,
-        dice: 6,
-      );
-      final after = play(state, 1); // second token leaves the yard
-      expect(after.tokens[1].take(2), [0, 0]);
-      final next = after.copyWith(currentSeat: 0, dice: 5);
-      expect(canMove(next, 0), isFalse); // 10 -> 15 passes square 13
+      expect(canMove(atStart(3), 0), isTrue); // lands on 13
+      expect(canMove(atStart(5), 0), isTrue); // passes 13
     });
 
     test('on the last track square block the way into the home column', () {

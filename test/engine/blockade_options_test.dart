@@ -120,7 +120,7 @@ void main() {
       expect(moves(state, 4), hasLength(1));
     });
 
-    test('a pair on its owner\'s own start square is a blockade', () {
+    test('not even on its owner\'s own start square', () {
       final state = makeState(
         rules: base,
         tokens: {
@@ -128,9 +128,8 @@ void main() {
           1: [0, 0, -1, -1], // square 13
         },
       );
-      expect(moves(state, 3), isEmpty);
-      expect(moves(state, 5), isEmpty);
-      expect(moves(state, 2), hasLength(1));
+      expect(moves(state, 3), hasLength(1));
+      expect(moves(state, 5), hasLength(1));
     });
 
     test('a pair on an ordinary square blocks', () {
@@ -314,13 +313,12 @@ void main() {
       expect(units(inside, 2), isEmpty);
     });
 
-    test('a pair on a safe square is no blockade, so it cannot move as one',
-        () {
-      expect(units(pairAt(8), 4), isEmpty);
-    });
-
-    test('a pair on its own start square is a blockade and can move', () {
-      expect(units(pairAt(0), 4), hasLength(1));
+    test(
+        'a pair on a safe square is no blockade, so it cannot move as one '
+        '(unless it forms one)', () {
+      final noForming = rules.copyWith(blockadeFormFromSafe: false);
+      expect(units(pairAt(8, r: noForming), 4), isEmpty);
+      expect(units(pairAt(8), 4), hasLength(1)); // forming a blockade
     });
 
     test('it never captures a single piece, so it cannot land on one', () {
@@ -393,6 +391,159 @@ void main() {
     });
   });
 
+  group('forming blockades from a safe square', () {
+    GameState pairAt(int p, {RulesConfig? r, Map<int, List<int>>? more}) =>
+        makeState(
+          rules: r ?? base,
+          tokens: {
+            0: [p, p, -1, -1],
+            ...?more,
+          },
+        );
+
+    test('is on by default with the blockade rule', () {
+      expect(const RulesConfig().blockadeFormFromSafe, isTrue);
+      expect(base.formFromSafeActive, isTrue);
+      expect(const RulesConfig().formFromSafeActive, isFalse); // no blockades
+      expect(base.normalized().blockadeFormFromSafe, isTrue);
+      expect(const RulesConfig.strategic().formFromSafeActive, isTrue);
+    });
+
+    test('two tokens on the yard exit may step out together on an even roll',
+        () {
+      final state = pairAt(0).copyWith(dice: 4);
+      final move = unitMove(state);
+      expect((move.from, move.to, move.partnerIndex), (0, 2, 1));
+      final after = Engine.apply(state, move);
+      expect(after.tokens[0].take(2), [2, 2]);
+      // The pair is now a blockade on an ordinary square.
+      expect(Engine.blockades(after), [(seat: 0, square: 2)]);
+    });
+
+    test('and the normal moves stay available', () {
+      final state = pairAt(0);
+      expect(singles(state, 4), hasLength(2));
+      expect(units(state, 4), hasLength(1));
+    });
+
+    test('odd rolls have no such option', () {
+      for (final d in [1, 3, 5]) {
+        expect(units(pairAt(0), d), isEmpty, reason: 'roll $d');
+      }
+    });
+
+    test('a star square works the same', () {
+      for (final d in [2, 4, 6]) {
+        expect(units(pairAt(8), d).single.to, 8 + d ~/ 2, reason: 'roll $d');
+      }
+    });
+
+    test('one token is not enough; three offer the two lowest', () {
+      final one = makeState(
+        rules: base,
+        tokens: {
+          0: [0, -1, -1, -1],
+        },
+      );
+      expect(units(one, 4), isEmpty);
+      final three = makeState(
+        rules: base,
+        tokens: {
+          0: [0, 0, 0, -1],
+        },
+      );
+      final move = units(three, 4).single;
+      expect((move.tokenIndex, move.partnerIndex), (0, 1));
+    });
+
+    test('can be switched off', () {
+      final off = base.copyWith(blockadeFormFromSafe: false);
+      expect(units(pairAt(0, r: off), 4), isEmpty);
+    });
+
+    test('needs the blockade rule', () {
+      expect(units(pairAt(0, r: const RulesConfig()), 4), isEmpty);
+    });
+
+    test('without moving blockades the pair cannot jump over a blockade', () {
+      final ahead = {
+        1: [relativeFor(1, 1), relativeFor(1, 1), -1, -1],
+      };
+      expect(units(pairAt(0, more: ahead), 4), isEmpty); // 0 -> 2 passes 1
+      expect(units(pairAt(0, more: ahead), 2), isEmpty); // lands on 1
+      final moving = base.copyWith(blockadeMovement: true);
+      expect(units(pairAt(0, r: moving, more: ahead), 4), hasLength(1));
+    });
+
+    test('it cannot land on a single piece (no capture)', () {
+      final single = {
+        1: [relativeFor(1, 2), -1, -1, -1],
+      };
+      expect(units(pairAt(0, more: single), 4), isEmpty);
+    });
+
+    test('the friendly restriction applies to walking pairs', () {
+      final strict = base.copyWith(blockadeFriendlyRestriction: true);
+      final state = makeState(
+        rules: strict,
+        tokens: {
+          0: [0, 0, 1, 1],
+        },
+      );
+      expect(units(state, 4).where((m) => m.from == 0), isEmpty);
+    });
+
+    test('the new blockade stops opponents behind it', () {
+      final state = makeState(
+        rules: base,
+        tokens: {
+          0: [0, 0, -1, -1],
+          // Seat 3's token on absolute square 49, a few squares behind.
+          3: [relativeFor(3, 49), -1, -1, -1],
+        },
+        dice: 6,
+      );
+      final formed = Engine.apply(state, units(state, 6).single);
+      expect(formed.tokens[0].take(2), [3, 3]);
+      final behind = formed.copyWith(currentSeat: 3, dice: 6);
+      // 49 + 6 = 55 -> square 3 (51, 0, 1, 2, 3): lands on the blockade.
+      expect(canMove(behind, 0), isFalse);
+    });
+
+    test('banked rolls offer it as well', () {
+      final banked = base.copyWith(bankedRolls: true);
+      final start = makeMoving(
+        rules: banked,
+        bank: [4],
+        tokens: {
+          0: [0, 0, -1, -1],
+        },
+      );
+      expect(Engine.legalMoves(start).where((m) => m.isUnit), hasLength(1));
+    });
+
+    test('Engine.blockades lists what stands on the board', () {
+      final state = makeState(
+        rules: base,
+        tokens: {
+          0: [10, 10, -1, -1],
+          1: [relativeFor(1, 20), relativeFor(1, 20), -1, -1],
+        },
+      );
+      expect(
+        Engine.blockades(state).map((b) => (b.seat, b.square)).toSet(),
+        {(0, 10), (1, 20)},
+      );
+      final plain = makeState(
+        rules: const RulesConfig(),
+        tokens: {
+          0: [10, 10, -1, -1],
+        },
+      );
+      expect(Engine.blockades(plain), isEmpty);
+    });
+  });
+
   group('blockade capture', () {
     final rules = base.copyWith(
       blockadeMovement: true,
@@ -435,17 +586,6 @@ void main() {
       final after = Engine.apply(state, unitMove(state));
       expect(after.tokens[0].take(2), [8, 8]);
       expect(after.tokens[2].take(2), everyElement(relativeFor(2, 8)));
-    });
-
-    test('a blockade on its owner\'s start square is safe from capture', () {
-      final state = makeState(
-        rules: rules,
-        tokens: {
-          0: [10, 10, -1, -1],
-          1: [0, 0, -1, -1], // square 13
-        },
-      );
-      expect(units(state, 6), isEmpty); // 10 + 3 = 13
     });
 
     test('single tokens still cannot capture a blockade', () {
@@ -675,21 +815,6 @@ void main() {
       final after = Engine.apply(state, unitMove(state));
       expect(after.tokens[1].take(2), everyElement(relativeFor(1, 10)));
       expect(after.tokens[0][0], 9); // left behind, alone and capturable
-    });
-
-    test('a pair on its owner\'s start square can be squatted on too', () {
-      // Seat 1's start square is 13; seat 0 lands on it with a 3.
-      final state = makeState(
-        rules: rules,
-        tokens: {
-          0: [10, -1, -1, -1],
-          1: [0, 0, -1, -1],
-        },
-        dice: 3,
-      );
-      final after = Engine.apply(state, moves(state, 3).single);
-      expect(after.tokens[0][0], 13);
-      expect(after.tokens[1].take(2), [0, 0]);
     });
 
     test('a teammate blockade is not squatted on', () {

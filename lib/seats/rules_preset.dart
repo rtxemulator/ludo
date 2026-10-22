@@ -70,6 +70,7 @@ Map<String, Object?> rulesToJson(RulesConfig rules) => {
       'blockades': rules.blockades,
       'teamsEnabled': rules.teamsEnabled,
       'bankedRolls': rules.bankedRolls,
+      'blockadeFormFromSafe': rules.blockadeFormFromSafe,
       'blockadeFriendlyRestriction': rules.blockadeFriendlyRestriction,
       'blockadeMovement': rules.blockadeMovement,
       'blockadeCapture': rules.blockadeCapture,
@@ -103,6 +104,7 @@ RulesConfig rulesFromJson(Map<String, Object?> json) {
     blockades: flag('blockades', d.blockades),
     teamsEnabled: flag('teamsEnabled', d.teamsEnabled),
     bankedRolls: flag('bankedRolls', d.bankedRolls),
+    blockadeFormFromSafe: flag('blockadeFormFromSafe', d.blockadeFormFromSafe),
     blockadeFriendlyRestriction:
         flag('blockadeFriendlyRestriction', d.blockadeFriendlyRestriction),
     blockadeMovement: flag('blockadeMovement', d.blockadeMovement),

@@ -25,6 +25,7 @@ class RulesConfig {
     this.blockades = false,
     this.teamsEnabled = false,
     this.bankedRolls = false,
+    this.blockadeFormFromSafe = true,
     this.blockadeFriendlyRestriction = false,
     this.blockadeMovement = false,
     this.blockadeCapture = false,
@@ -87,11 +88,19 @@ class RulesConfig {
 
   // ---- Blockade options ---------------------------------------------------
   //
-  // All of these only matter with [blockades]; [blockadeCapture] and
+  // All of these only matter with [blockades] ([blockadeFormFromSafe] is on by
+  // default, the others off); [blockadeCapture] and
   // [blockadeUnbreakable] also need [blockadeMovement]. The engine reads the
   // `...Active` getters below, which apply those prerequisites, so a stale
   // flag can never switch a rule on by itself. See `docs/ludo-rules.md`
   // section 9.
+
+  /// Forming blockades from a safe square: two or more of your tokens on a
+  /// safe square (a yard exit or a star) may, on an even roll, step out
+  /// together onto an ordinary square, each token advancing half the roll,
+  /// which forms a blockade there. Safe squares themselves never hold
+  /// blockades. On by default (it only matters with [blockades]).
+  final bool blockadeFormFromSafe;
 
   /// Nobody may pass a blockade of their own or of a teammate (landing
   /// rules are unchanged).
@@ -118,6 +127,9 @@ class RulesConfig {
   /// by a single token of the blockade's owner landing on the square; if the
   /// blockade moves away it stays behind.
   final bool pieceOnBlockade;
+
+  /// Forming blockades from safe squares, in force.
+  bool get formFromSafeActive => blockades && blockadeFormFromSafe;
 
   /// Friendly-blockade restriction, in force.
   bool get friendlyRestrictionActive =>
@@ -161,6 +173,7 @@ class RulesConfig {
     bool? blockades,
     bool? teamsEnabled,
     bool? bankedRolls,
+    bool? blockadeFormFromSafe,
     bool? blockadeFriendlyRestriction,
     bool? blockadeMovement,
     bool? blockadeCapture,
@@ -179,6 +192,7 @@ class RulesConfig {
       blockades: blockades ?? this.blockades,
       teamsEnabled: teamsEnabled ?? this.teamsEnabled,
       bankedRolls: bankedRolls ?? this.bankedRolls,
+      blockadeFormFromSafe: blockadeFormFromSafe ?? this.blockadeFormFromSafe,
       blockadeFriendlyRestriction:
           blockadeFriendlyRestriction ?? this.blockadeFriendlyRestriction,
       blockadeMovement: blockadeMovement ?? this.blockadeMovement,
@@ -202,6 +216,7 @@ class RulesConfig {
       other.blockades == blockades &&
       other.teamsEnabled == teamsEnabled &&
       other.bankedRolls == bankedRolls &&
+      other.blockadeFormFromSafe == blockadeFormFromSafe &&
       other.blockadeFriendlyRestriction == blockadeFriendlyRestriction &&
       other.blockadeMovement == blockadeMovement &&
       other.blockadeCapture == blockadeCapture &&
@@ -221,6 +236,7 @@ class RulesConfig {
         blockades,
         teamsEnabled,
         bankedRolls,
+        blockadeFormFromSafe,
         blockadeFriendlyRestriction,
         blockadeMovement,
         blockadeCapture,
@@ -239,6 +255,7 @@ class RulesConfig {
       '${blockades ? ', blockade options: ${_optionNames().join(' ')}' : ''})';
 
   List<String> _optionNames() => [
+        if (blockadeFormFromSafe) 'formFromSafe',
         if (blockadeFriendlyRestriction) 'friendlyRestriction',
         if (blockadeMovement) 'movement',
         if (blockadeCapture) 'capture',

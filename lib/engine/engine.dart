@@ -274,8 +274,68 @@ abstract final class Engine {
       }
       moves.add(Move(owner: owner, tokenIndex: i, from: from, to: to));
     }
-    if (blockades != null && rules.blockadeMovementActive && d.isEven) {
-      moves.addAll(_unitMoves(state, blockades, owner, d ~/ 2));
+    if (blockades != null && d.isEven) {
+      if (rules.blockadeMovementActive) {
+        moves.addAll(_unitMoves(state, blockades, owner, d ~/ 2));
+      }
+      if (rules.formFromSafeActive) {
+        moves.addAll(_formingMoves(state, blockades, owner, d ~/ 2));
+      }
+    }
+    return moves;
+  }
+
+  /// Moves that form a blockade: two tokens of [owner] standing on the same
+  /// safe square step out together onto an ordinary square, each [step]
+  /// squares. With three or more tokens there, the two lowest-numbered go.
+  /// Without moving blockades the pair has to walk (no jumping over
+  /// blockades), as a single token would.
+  static List<Move> _formingMoves(
+    GameState state,
+    Map<int, List<int>> blockades,
+    int owner,
+    int step,
+  ) {
+    final rules = state.rules;
+    final tokens = state.tokens[owner];
+    final moves = <Move>[];
+    final seen = <int>{};
+    for (var i = 0; i < tokensPerSeat; i++) {
+      final p = tokens[i];
+      if (!isOnTrack(p) ||
+          !isSafeSquare(absoluteSquare(owner, p)) ||
+          !seen.add(p)) {
+        continue;
+      }
+      final mates = [
+        for (var j = i; j < tokensPerSeat; j++)
+          if (tokens[j] == p && !state.isWaiting(owner, j)) j,
+      ];
+      if (mates.length < 2) {
+        continue;
+      }
+      final to = _destination(rules, p, step);
+      if (to == null ||
+          !isOnTrack(to) ||
+          isSafeSquare(absoluteSquare(owner, to))) {
+        continue; // it has to end on an ordinary square to form a blockade
+      }
+      if (!rules.blockadeMovementActive &&
+          !_pathClear(state, blockades, owner, p, to)) {
+        continue;
+      }
+      if (!_unitMayLand(state, blockades, owner, to)) {
+        continue;
+      }
+      moves.add(
+        Move(
+          owner: owner,
+          tokenIndex: mates[0],
+          from: p,
+          to: to,
+          partnerIndex: mates[1],
+        ),
+      );
     }
     return moves;
   }
@@ -479,10 +539,23 @@ abstract final class Engine {
     return to;
   }
 
+  /// The blockades on the board: the seat holding each and its absolute
+  /// square. Empty without `RulesConfig.blockades`.
+  static List<({int seat, int square})> blockades(GameState state) {
+    if (!state.rules.blockades) {
+      return const [];
+    }
+    return [
+      for (final entry in _blockadeMap(state).entries)
+        for (final seat in entry.value) (seat: seat, square: entry.key),
+    ];
+  }
+
   /// Absolute square -> seats that hold a blockade there (2+ of their own
-  /// tokens). Safe squares never hold blockades (they stay open to everyone),
-  /// with one exception: a seat's own start square, where a pair that came
-  /// out of the yard does form a blockade.
+  /// tokens). Safe squares (yard exits and stars) never hold blockades: they
+  /// stay open to everyone. Blockades are formed on ordinary squares, for
+  /// instance by stepping out of a safe square together
+  /// (`RulesConfig.blockadeFormFromSafe`).
   static Map<int, List<int>> _blockadeMap(GameState state) {
     final result = <int, List<int>>{};
     for (final seat in state.activeSeats) {
@@ -494,9 +567,7 @@ abstract final class Engine {
         }
       }
       counts.forEach((square, count) {
-        final open = isSafeSquare(square) &&
-            square != absoluteSquare(seat, startPosition);
-        if (count >= 2 && !open) {
+        if (count >= 2 && !isSafeSquare(square)) {
           (result[square] ??= []).add(seat);
         }
       });

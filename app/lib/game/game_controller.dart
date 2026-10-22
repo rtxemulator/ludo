@@ -537,6 +537,9 @@ class GameController extends ChangeNotifier {
   /// move while none is selected), one entry per token.
   List<Move> get glowMoves {
     final source = banked ? choice?.glowMoves ?? const <Move>[] : legal;
+    if (!banked && !source.any((m) => m.isUnit)) {
+      return legal; // the common case: nothing to expand
+    }
     final seen = <int>{};
     final glowing = <Move>[];
     for (final m in source) {

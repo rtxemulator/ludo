@@ -19,11 +19,18 @@ class TurnSnapshot {
     required List<List<int>> tokens,
     required List<int> finishOrder,
     required List<int> bank,
+    List<List<int>>? rest,
   })  : tokens = List.unmodifiable(tokens.map(List<int>.unmodifiable)),
         finishOrder = List.unmodifiable(finishOrder),
-        bank = List.unmodifiable(bank);
+        bank = List.unmodifiable(bank),
+        rest = List.unmodifiable(
+          (rest ?? zeroRest()).map(List<int>.unmodifiable),
+        );
 
   final List<List<int>> tokens;
+
+  /// `GameState.rest` when the moving phase began.
+  final List<List<int>> rest;
   final List<int> finishOrder;
 
   /// The bank when the moving phase started.
@@ -34,15 +41,22 @@ class TurnSnapshot {
       other is TurnSnapshot &&
       _listEquals(other.finishOrder, finishOrder) &&
       _listEquals(other.bank, bank) &&
-      _tokensEqual(other.tokens, tokens);
+      _tokensEqual(other.tokens, tokens) &&
+      _tokensEqual(other.rest, rest);
 
   @override
   int get hashCode => Object.hash(
         Object.hashAll(finishOrder),
         Object.hashAll(bank),
         Object.hashAll(tokens.expand((seat) => seat)),
+        Object.hashAll(rest.expand((seat) => seat)),
       );
 }
+
+/// A fresh `rest` table: nobody is waiting.
+List<List<int>> zeroRest() => [
+      for (var s = 0; s < seatCount; s++) List<int>.filled(tokensPerSeat, 0),
+    ];
 
 /// Immutable snapshot of a Ludo match.
 ///
@@ -62,10 +76,14 @@ class GameState {
     List<int> bank = const [],
     this.bankPhase = BankPhase.rolling,
     this.turnSnapshot,
+    List<List<int>>? rest,
   })  : tokens = List.unmodifiable(tokens.map(List<int>.unmodifiable)),
         activeSeats = List.unmodifiable(activeSeats),
         finishOrder = List.unmodifiable(finishOrder),
-        bank = List.unmodifiable(bank);
+        bank = List.unmodifiable(bank),
+        rest = List.unmodifiable(
+          (rest ?? zeroRest()).map(List<int>.unmodifiable),
+        );
 
   const GameState._trusted({
     required this.tokens,
@@ -80,10 +98,19 @@ class GameState {
     required this.bank,
     required this.bankPhase,
     required this.turnSnapshot,
+    required this.rest,
   });
 
   /// `tokens[seat][i]` is the relative position of token `i` of `seat`.
   final List<List<int>> tokens;
+
+  /// `rest[seat][i]` is how many more turn ends of its controlling seat
+  /// token `i` must sit out (`> 0`: it cannot move). Only a piece squatting
+  /// on an opponent blockade (`RulesConfig.pieceOnBlockade`) ever waits.
+  final List<List<int>> rest;
+
+  /// Whether token [index] of [seat] is waiting and cannot move.
+  bool isWaiting(int seat, int index) => rest[seat][index] > 0;
 
   final RulesConfig rules;
 
@@ -139,6 +166,7 @@ class GameState {
     BankPhase? bankPhase,
     TurnSnapshot? turnSnapshot,
     bool clearSnapshot = false,
+    List<List<int>>? rest,
   }) {
     return GameState._trusted(
       tokens: tokens == null
@@ -157,6 +185,9 @@ class GameState {
       bank: bank == null ? this.bank : List.unmodifiable(bank),
       bankPhase: bankPhase ?? this.bankPhase,
       turnSnapshot: clearSnapshot ? null : (turnSnapshot ?? this.turnSnapshot),
+      rest: rest == null
+          ? this.rest
+          : List.unmodifiable(rest.map(List<int>.unmodifiable)),
     );
   }
 
@@ -291,7 +322,8 @@ class GameState {
     return _listEquals(other.activeSeats, activeSeats) &&
         _listEquals(other.finishOrder, finishOrder) &&
         _listEquals(other.bank, bank) &&
-        _tokensEqual(other.tokens, tokens);
+        _tokensEqual(other.tokens, tokens) &&
+        _tokensEqual(other.rest, rest);
   }
 
   @override
@@ -308,6 +340,7 @@ class GameState {
         Object.hashAll(bank),
         bankPhase,
         turnSnapshot,
+        Object.hashAll(rest.expand((seat) => seat)),
       );
 
   @override

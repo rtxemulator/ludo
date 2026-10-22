@@ -199,6 +199,7 @@ abstract final class Engine {
           tokens: state.tokens,
           finishOrder: state.finishOrder,
           bank: bank,
+          rest: state.rest,
         );
     final moving = state.copyWith(
       bank: bank,
@@ -211,6 +212,7 @@ abstract final class Engine {
       // Dead end: undo this turn's moves, drop the bank, pass the turn.
       final reverted = moving.copyWith(
         tokens: snapshot.tokens,
+        rest: snapshot.rest,
         finishOrder: snapshot.finishOrder,
       );
       return RollResult(
@@ -251,11 +253,19 @@ abstract final class Engine {
   /// Single-die moves for the controlled seat, ignoring the bank.
   static List<Move> _movesFor(GameState state, int d) {
     final owner = state.controlledSeat;
-    final blockades = state.rules.blockades ? _blockadeMap(state) : null;
+    final rules = state.rules;
+    final blockades = rules.blockades ? _blockadeMap(state) : null;
+    // Unbreakable blockades: their tokens only move as a unit.
+    final glued = rules.blockadeUnbreakableActive
+        ? _pairedTokens(state, owner)
+        : const <int>{};
     final moves = <Move>[];
     for (var i = 0; i < tokensPerSeat; i++) {
+      if (state.isWaiting(owner, i) || glued.contains(i)) {
+        continue;
+      }
       final from = state.tokens[owner][i];
-      final to = _destination(state.rules, from, d);
+      final to = _destination(rules, from, d);
       if (to == null) {
         continue;
       }
@@ -264,7 +274,102 @@ abstract final class Engine {
       }
       moves.add(Move(owner: owner, tokenIndex: i, from: from, to: to));
     }
+    if (blockades != null && rules.blockadeMovementActive && d.isEven) {
+      moves.addAll(_unitMoves(state, blockades, owner, d ~/ 2));
+    }
     return moves;
+  }
+
+  /// Indices of [owner]'s tokens standing as exactly two on a non-safe track
+  /// square (a blockade that may not be split).
+  static Set<int> _pairedTokens(GameState state, int owner) {
+    final tokens = state.tokens[owner];
+    final result = <int>{};
+    for (var i = 0; i < tokensPerSeat; i++) {
+      final p = tokens[i];
+      if (!isOnTrack(p) || isSafeSquare(absoluteSquare(owner, p))) {
+        continue;
+      }
+      if (tokens.where((q) => q == p).length == 2) {
+        result.add(i);
+      }
+    }
+    return result;
+  }
+
+  /// Moves of two-piece blockades of [owner] as a unit, each token advancing
+  /// [step] squares. The unit jumps over everything on the way; it may only
+  /// land where [_unitMayLand] allows.
+  static List<Move> _unitMoves(
+    GameState state,
+    Map<int, List<int>> blockades,
+    int owner,
+    int step,
+  ) {
+    final rules = state.rules;
+    final tokens = state.tokens[owner];
+    final moves = <Move>[];
+    for (var i = 0; i < tokensPerSeat; i++) {
+      for (var j = i + 1; j < tokensPerSeat; j++) {
+        final p = tokens[i];
+        if (p != tokens[j] ||
+            !isOnTrack(p) ||
+            state.isWaiting(owner, i) ||
+            state.isWaiting(owner, j) ||
+            tokens.where((q) => q == p).length != 2) {
+          continue;
+        }
+        final holders = blockades[absoluteSquare(owner, p)];
+        if (holders == null || !holders.contains(owner)) {
+          continue; // not a blockade (e.g. open safe squares)
+        }
+        final to = _destination(rules, p, step);
+        if (to == null || !_unitMayLand(state, blockades, owner, to)) {
+          continue;
+        }
+        moves.add(
+          Move(
+            owner: owner,
+            tokenIndex: i,
+            from: p,
+            to: to,
+            partnerIndex: j,
+          ),
+        );
+      }
+    }
+    return moves;
+  }
+
+  /// Whether a moving blockade of [owner] may stop at relative [to].
+  static bool _unitMayLand(
+    GameState state,
+    Map<int, List<int>> blockades,
+    int owner,
+    int to,
+  ) {
+    if (!isOnTrack(to)) {
+      return true; // home column and finish hold no blockades
+    }
+    final square = absoluteSquare(owner, to);
+    final holders = blockades[square];
+    if (holders == null) {
+      return true;
+    }
+    for (final b in holders) {
+      if (b == owner) {
+        return false; // never on top of another pair of its own
+      }
+      if (state.unitOf(b) == state.unitOf(owner)) {
+        if (!isSafeSquare(square)) {
+          return false; // a teammate's blockade, as for a single token
+        }
+      } else if (!(state.rules.blockadeCaptureActive &&
+          !isSafeSquare(square))) {
+        return false; // opponent blockades fall only to a blockade capture
+      }
+    }
+    return true;
   }
 
   static List<Move> _legalBanked(GameState state) {
@@ -283,7 +388,7 @@ abstract final class Engine {
       }
       final rest = [...state.bank]..removeAt(index);
       for (final m in _movesFor(state, value)) {
-        final next = state.copyWith(tokens: _effects(state, m).tokens);
+        final next = _board(state, m);
         if (_canSpendAll(next, rest, memo)) {
           moves.add(Move(
             owner: m.owner,
@@ -291,6 +396,7 @@ abstract final class Engine {
             from: m.from,
             to: m.to,
             dieIndex: index,
+            partnerIndex: m.partnerIndex,
           ));
         }
       }
@@ -314,7 +420,8 @@ abstract final class Engine {
       return false;
     }
     final sorted = [...remaining]..sort();
-    final key = '${state.tokens.expand((t) => t).join(',')}|${sorted.join()}';
+    final key = '${state.tokens.expand((t) => t).join(',')}'
+        '|${state.rest.expand((t) => t).join()}|${sorted.join()}';
     final cached = memo[key];
     if (cached != null) {
       return cached;
@@ -323,7 +430,7 @@ abstract final class Engine {
     for (final value in sorted.toSet()) {
       final rest = [...sorted]..remove(value);
       for (final m in _movesFor(state, value)) {
-        final next = state.copyWith(tokens: _effects(state, m).tokens);
+        final next = _board(state, m);
         if (_canSpendAll(next, rest, memo)) {
           result = true;
           break;
@@ -351,9 +458,12 @@ abstract final class Engine {
     return to;
   }
 
-  /// Absolute square -> seat that holds a blockade there (2+ own tokens).
-  static Map<int, int> _blockadeMap(GameState state) {
-    final result = <int, int>{};
+  /// Absolute square -> seats that hold a blockade there (2+ of their own
+  /// tokens). Several seats only share a square when it is a safe one. With
+  /// `blockadeSafeSquares` a pair on a safe square is no blockade at all.
+  static Map<int, List<int>> _blockadeMap(GameState state) {
+    final open = state.rules.safeSquaresOpenActive;
+    final result = <int, List<int>>{};
     for (final seat in state.activeSeats) {
       final counts = <int, int>{};
       for (final position in state.tokens[seat]) {
@@ -363,17 +473,19 @@ abstract final class Engine {
         }
       }
       counts.forEach((square, count) {
-        if (count >= 2) {
-          result[square] = seat;
+        if (count >= 2 && !(open && isSafeSquare(square))) {
+          (result[square] ??= []).add(seat);
         }
       });
     }
     return result;
   }
 
+  /// Whether a single token of [owner] may go from [from] to [to] without
+  /// running into a blockade.
   static bool _pathClear(
     GameState state,
-    Map<int, int> blockades,
+    Map<int, List<int>> blockades,
     int owner,
     int from,
     int to,
@@ -381,19 +493,30 @@ abstract final class Engine {
     if (blockades.isEmpty) {
       return true;
     }
+    final rules = state.rules;
     final first = from == yardPosition ? startPosition : from + 1;
     final last = to > lastTrackPosition ? lastTrackPosition : to;
     for (var position = first; position <= last; position++) {
       final square = absoluteSquare(owner, position);
-      final blocker = blockades[square];
-      if (blocker == null) {
+      final holders = blockades[square];
+      if (holders == null) {
         continue;
       }
-      if (state.unitOf(blocker) != state.unitOf(owner)) {
-        return false; // opponents can neither pass nor land
-      }
-      if (blocker != owner && position == to && !isSafeSquare(square)) {
-        return false; // a teammate may pass, but not land on the block
+      final landing = position == to;
+      for (final blocker in holders) {
+        if (state.unitOf(blocker) != state.unitOf(owner)) {
+          if (landing && rules.pieceOnBlockadeActive) {
+            continue; // a single piece may squat on an opponent blockade
+          }
+          return false; // opponents can neither pass nor land
+        }
+        if (landing) {
+          if (blocker != owner && !isSafeSquare(square)) {
+            return false; // a teammate may pass, but not land on the block
+          }
+        } else if (rules.friendlyRestrictionActive) {
+          return false; // not even friendly blockades may be passed
+        }
       }
     }
     return true;
@@ -425,7 +548,10 @@ abstract final class Engine {
       throw const IllegalMoveException('No roll is pending.');
     }
     final legal = legalMoves(state).where(
-      (m) => m.owner == move.owner && m.tokenIndex == move.tokenIndex,
+      (m) =>
+          m.owner == move.owner &&
+          m.tokenIndex == move.tokenIndex &&
+          m.partnerIndex == move.partnerIndex,
     );
     if (legal.isEmpty) {
       throw IllegalMoveException('$move is not legal with a $dice.');
@@ -434,7 +560,11 @@ abstract final class Engine {
     final owner = chosen.owner;
 
     final effects = _effects(state, chosen);
-    var after = state.copyWith(tokens: effects.tokens, clearDice: true);
+    var after = state.copyWith(
+      tokens: effects.tokens,
+      rest: effects.rest,
+      clearDice: true,
+    );
     after = _recordFinish(after, owner);
     if (after.isOver) {
       return after.copyWith(consecutiveSixes: 0);
@@ -465,6 +595,7 @@ abstract final class Engine {
       (m) =>
           m.owner == move.owner &&
           m.tokenIndex == move.tokenIndex &&
+          m.partnerIndex == move.partnerIndex &&
           state.bank[m.dieIndex] == value,
     );
     if (legal.isEmpty) {
@@ -477,7 +608,11 @@ abstract final class Engine {
     final rest = [...state.bank]..removeAt(chosen.dieIndex);
 
     final effects = _effects(state, chosen);
-    var after = state.copyWith(tokens: effects.tokens, bank: rest);
+    var after = state.copyWith(
+      tokens: effects.tokens,
+      rest: effects.rest,
+      bank: rest,
+    );
     after = _recordFinish(after, owner);
     if (after.isOver) {
       // Legal only as the last die, so the bank is already empty.
@@ -502,23 +637,54 @@ abstract final class Engine {
     return after;
   }
 
-  /// Token positions after [chosen], plus what the move did.
-  static ({List<List<int>> tokens, bool captured, bool reachedHome}) _effects(
-    GameState state,
-    Move chosen,
-  ) {
+  /// [state] with [move] played on the board (tokens and waiting only).
+  static GameState _board(GameState state, Move move) {
+    final e = _effects(state, move);
+    return state.copyWith(tokens: e.tokens, rest: e.rest);
+  }
+
+  /// Token positions and waiting counters after [chosen], plus what the move
+  /// did.
+  static ({
+    List<List<int>> tokens,
+    List<List<int>> rest,
+    bool captured,
+    bool reachedHome,
+  }) _effects(GameState state, Move chosen) {
     final owner = chosen.owner;
+    final rules = state.rules;
     final tokens = [
       for (final seat in state.tokens) [...seat]
     ];
+    final rest = [
+      for (final seat in state.rest) [...seat]
+    ];
     tokens[owner][chosen.tokenIndex] = chosen.to;
+    if (chosen.isUnit) {
+      tokens[owner][chosen.partnerIndex] = chosen.to;
+    }
 
     var captured = false;
     if (isOnTrack(chosen.to)) {
       final square = absoluteSquare(owner, chosen.to);
+      // Opponent blockades a single piece lands on (squatting): it neither
+      // captures them nor is it safe from them; it just has to wait.
+      final shielded = <int>{};
+      if (!chosen.isUnit && rules.pieceOnBlockadeActive) {
+        final holders = _blockadeMap(state)[square] ?? const <int>[];
+        for (final seat in holders) {
+          if (state.unitOf(seat) != state.unitOf(owner)) {
+            shielded.add(seat);
+          }
+        }
+        if (shielded.isNotEmpty) {
+          rest[owner][chosen.tokenIndex] = 2;
+        }
+      }
       if (!isSafeSquare(square)) {
         for (final seat in state.activeSeats) {
-          if (state.unitOf(seat) == state.unitOf(owner)) {
+          if (state.unitOf(seat) == state.unitOf(owner) ||
+              shielded.contains(seat)) {
             continue;
           }
           for (var i = 0; i < tokensPerSeat; i++) {
@@ -526,6 +692,7 @@ abstract final class Engine {
             if (isOnTrack(position) &&
                 absoluteSquare(seat, position) == square) {
               tokens[seat][i] = yardPosition;
+              rest[seat][i] = 0;
               captured = true;
             }
           }
@@ -534,6 +701,7 @@ abstract final class Engine {
     }
     return (
       tokens: tokens,
+      rest: rest,
       captured: captured,
       reachedHome: chosen.to == finishPosition,
     );
@@ -576,6 +744,7 @@ abstract final class Engine {
       seat: state.currentSeat,
       dice: dice,
       tokenIndex: move.tokenIndex,
+      unit: move.isUnit,
     );
   }
 
@@ -598,6 +767,7 @@ abstract final class Engine {
       final moves = legalMoves(ready).where(
         (m) =>
             m.tokenIndex == entry.tokenIndex &&
+            m.isUnit == entry.unit &&
             ready.bank[m.dieIndex] == entry.dice,
       );
       if (moves.isEmpty) {
@@ -611,8 +781,9 @@ abstract final class Engine {
         'with a ${ready.dice}.',
       );
     }
-    final moves =
-        legalMoves(ready).where((m) => m.tokenIndex == entry.tokenIndex);
+    final moves = legalMoves(ready).where(
+      (m) => m.tokenIndex == entry.tokenIndex && m.isUnit == entry.unit,
+    );
     if (moves.isEmpty) {
       throw IllegalMoveException('$entry is not a legal move.');
     }
@@ -644,7 +815,19 @@ abstract final class Engine {
         break;
       }
     }
+    // A turn of the controlled seat ends: its waiting tokens wait one less.
+    final waiting = state.rest[state.controlledSeat];
+    final rest = waiting.any((r) => r > 0)
+        ? [
+            for (var seat = 0; seat < seatCount; seat++)
+              if (seat == state.controlledSeat)
+                [for (final r in waiting) r > 0 ? r - 1 : 0]
+              else
+                state.rest[seat],
+          ]
+        : null;
     return state.copyWith(
+      rest: rest,
       currentSeat: next,
       clearDice: true,
       consecutiveSixes: 0,

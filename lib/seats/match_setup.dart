@@ -32,7 +32,7 @@ class MatchSetup {
     RulesConfig rules = const RulesConfig(),
     this.teams = false,
   })  : seats = List.unmodifiable(seats),
-        baseRules = rules.copyWith(teamsEnabled: false) {
+        baseRules = rules.copyWith(teamsEnabled: false).normalized() {
     if (seats.length != seatCount) {
       throw ArgumentError.value(seats, 'seats', 'need exactly $seatCount');
     }
@@ -64,7 +64,8 @@ class MatchSetup {
   /// The four seats; `null` is an empty one.
   final List<SeatConfig?> seats;
 
-  /// The rules without the derived `teamsEnabled` flag.
+  /// The rules without the derived `teamsEnabled` flag, with blockade
+  /// options normalised (`RulesConfig.normalized`).
   final RulesConfig baseRules;
 
   /// Whether 2v2 team play was chosen (only effective with four players).
@@ -181,7 +182,8 @@ class MatchSetup {
     return _copy(teams: on);
   }
 
-  /// Replaces the rules (the derived `teamsEnabled` of [rules] is ignored).
+  /// Replaces the rules (the derived `teamsEnabled` of [rules] is ignored,
+  /// and blockade options whose prerequisite is off are switched off).
   MatchSetup withRules(RulesConfig rules) => _copy(rules: rules);
 
   // ---- Serialisation ------------------------------------------------------

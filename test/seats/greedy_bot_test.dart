@@ -94,6 +94,56 @@ void main() {
     });
   });
 
+  group('GreedyBot with the blockade options', () {
+    const all = RulesConfig(
+      blockades: true,
+      blockadeSafeSquares: true,
+      blockadeFriendlyRestriction: true,
+      blockadeMovement: true,
+      blockadeCapture: true,
+      blockadeUnbreakable: true,
+      pieceOnBlockade: true,
+    );
+
+    test('walks a blockade rather than splitting it', () {
+      final state = makeState(
+        rules: all.copyWith(blockadeUnbreakable: false),
+        tokens: {
+          0: [10, 10, -1, -1],
+        },
+        dice: 4,
+      );
+      expect(pick(state).isUnit, isTrue);
+    });
+
+    for (final banked in [false, true]) {
+      for (final teams in [false, true]) {
+        test(
+            'finish games with every option on'
+            '${banked ? ', banked' : ''}${teams ? ', teams' : ''}', () {
+          final setup = MatchSetup.hotSeat(teams: teams).withRules(
+            all.copyWith(bankedRolls: banked),
+          );
+          for (var seed = 1; seed <= 6; seed++) {
+            var state = setup.newGame(seed);
+            var decisions = 0;
+            while (true) {
+              state = Engine.nextDecision(state);
+              if (state.isOver) {
+                break;
+              }
+              final legal = Engine.legalMoves(state);
+              final move = bot.choose(state, legal);
+              expect(legal, contains(move));
+              state = Engine.apply(state, move);
+              expect(++decisions, lessThan(30000), reason: 'game $seed');
+            }
+          }
+        });
+      }
+    }
+  });
+
   group('GreedyBot playouts', () {
     const presets = {
       'classic': RulesConfig.classic(),

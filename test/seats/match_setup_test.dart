@@ -274,6 +274,31 @@ void main() {
       expect(applied.teamsEnabled, isTrue);
     });
 
+    test('a blockade option makes the strategic preset custom', () {
+      expect(
+        RulesPreset.of(
+          const RulesConfig.strategic().copyWith(blockadeSafeSquares: true),
+        ),
+        RulesPreset.custom,
+      );
+    });
+
+    test('a setup drops blockade options whose prerequisite is off', () {
+      final setup = MatchSetup.hotSeat().withRules(
+        const RulesConfig(
+          blockades: true,
+          blockadeCapture: true,
+          pieceOnBlockade: true,
+        ),
+      );
+      expect(setup.rules.blockadeCapture, isFalse);
+      expect(setup.rules.pieceOnBlockade, isTrue);
+      final noBlockades = setup.withRules(
+        setup.baseRules.copyWith(blockades: false),
+      );
+      expect(noBlockades.rules.pieceOnBlockade, isFalse);
+    });
+
     test('the preset of a setup follows its rules', () {
       final setup = MatchSetup.hotSeat().withRules(const RulesConfig.quick());
       expect(setup.preset, RulesPreset.quick);
@@ -292,6 +317,12 @@ void main() {
         blockades: true,
         teamsEnabled: true,
         bankedRolls: true,
+        blockadeSafeSquares: true,
+        blockadeFriendlyRestriction: true,
+        blockadeMovement: true,
+        blockadeCapture: true,
+        blockadeUnbreakable: true,
+        pieceOnBlockade: true,
       );
       expect(rulesFromJson(rulesToJson(rules)), rules);
       expect(rulesFromJson(const {}), const RulesConfig());

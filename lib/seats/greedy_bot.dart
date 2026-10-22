@@ -16,6 +16,8 @@ class GreedyBot {
   static const double safeSquareBonus = 4;
   static const double dangerPenalty = 9;
   static const double escapeBonus = 6;
+  static const double unitBonus = 3;
+  static const double squatPenalty = 6;
 
   /// Picks one of [legal] (the moves `Engine.legalMoves` gave for [state]).
   Move choose(GameState state, List<Move> legal) {
@@ -38,7 +40,15 @@ class GreedyBot {
   double score(GameState state, Move move) {
     final after = Engine.apply(state, move);
     final mine = state.seatsOfUnit(state.unitOf(move.owner)).toSet();
-    var value = (_progress(move.to) - _progress(move.from)).toDouble();
+    // A moving blockade advances two tokens and keeps its wall.
+    var value = (_progress(move.to) - _progress(move.from)).toDouble() *
+        (move.isUnit ? 2 : 1);
+    if (move.isUnit) {
+      value += unitBonus;
+    }
+    if (after.isWaiting(move.owner, move.tokenIndex)) {
+      value -= squatPenalty; // stuck on an enemy blockade for a while
+    }
 
     // Captures: every opponent token that went back to its yard.
     for (final seat in state.activeSeats) {

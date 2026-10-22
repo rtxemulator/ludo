@@ -38,7 +38,7 @@ Team play needs all four seats (engine rule). Going below four players drops tea
 
 ## 5. Screens
 
-`SetupScreen` (the app's first screen): player count (2/3/4), team mode (4 players), a `SeatMap` picture of the table, one tile per seat (Human / AI / Online-disabled), rule presets, Banked rolls, and an expandable list of every house rule (teammate control only in team play; the five optional blockade rules under "Blockades", disabled while their prerequisites are off). "Play" opens `GameScreen(setup, settings)`; the game menu has "Players & rules" to come back. The last setup and the `GameSettings` live in memory for the app's lifetime (disk persistence comes with Milestones 5 and 6).
+`SetupScreen` (the app's first screen): player count (2/3/4), team mode (4 players), a `SeatMap` picture of the table, one tile per seat (Human / AI / Online-disabled), rule presets, Banked rolls, and an expandable list of every house rule (teammate control only in team play; "Form blockades from safe squares" (on by default) and the five optional blockade rules under "Blockades", disabled while their prerequisites are off). "Play" opens `GameScreen(setup, settings)`; the game menu has "Players & rules" to come back. The last setup and the `GameSettings` live in memory for the app's lifetime (disk persistence comes with Milestones 5 and 6).
 
 ## 6. Not in this milestone
 

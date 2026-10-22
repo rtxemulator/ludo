@@ -34,6 +34,7 @@ class MoveAnimationPlan {
     required this.owner,
     required this.tokenIndex,
     required this.partnerIndex,
+    required this.formed,
     required this.mover,
     required this.partner,
     required this.victims,
@@ -70,6 +71,9 @@ class MoveAnimationPlan {
       path.add(restAfter[owner][index]);
     }
     final reachedHome = to == finishPosition;
+    final formed = isOnTrack(to) &&
+        _holdsBlockade(after, owner, to) &&
+        !_holdsBlockade(before, owner, to);
     final mover = TokenTimeline.hop(
       path: path,
       fromYard: from == yardPosition,
@@ -137,6 +141,7 @@ class MoveAnimationPlan {
       restAfter: restAfter,
       fromYard: from == yardPosition,
       reachedHome: reachedHome,
+      formed: formed,
     );
 
     var total = mover.durationMs;
@@ -153,6 +158,7 @@ class MoveAnimationPlan {
       owner: owner,
       tokenIndex: index,
       partnerIndex: move.partnerIndex,
+      formed: formed,
       mover: mover,
       partner: partner,
       victims: victims,
@@ -167,6 +173,9 @@ class MoveAnimationPlan {
 
   /// The second token of a moving blockade, or `-1`.
   final int partnerIndex;
+
+  /// Whether this move formed a blockade (a new pair on an ordinary square).
+  final bool formed;
   final TokenTimeline mover;
 
   /// The timeline of the partner token (moving blockades only).
@@ -213,6 +222,7 @@ PlanEffects _effects({
   required List<List<Pt>> restAfter,
   required bool fromYard,
   required bool reachedHome,
+  required bool formed,
 }) {
   final owner = move.owner;
   final index = move.tokenIndex;
@@ -295,6 +305,21 @@ PlanEffects _effects({
       ),
     );
   }
+  if (formed) {
+    // A blockade went up: two rings and a glow in the owner's colour from the
+    // square itself.
+    final wall = geometry.trackCell(absoluteSquare(owner, move.to));
+    for (final delay in const [0.0, 110.0]) {
+      rings.add(
+        FxRing(
+          ring: RingFx.wall(center: wall, startMs: impact + delay, spec: spec),
+          seat: owner,
+          kind: FxKind.wall,
+        ),
+      );
+    }
+    glows.add(FxGlow(center: wall, seat: owner, startMs: impact, spec: spec));
+  }
   if (move.isUnit) {
     rings.add(
       FxRing(
@@ -309,4 +334,11 @@ PlanEffects _effects({
     );
   }
   return PlanEffects(rings: rings, sparks: sparks, glows: glows);
+}
+
+/// Whether [seat] holds a blockade on its relative track position [position].
+bool _holdsBlockade(GameState state, int seat, int position) {
+  final square = absoluteSquare(seat, position);
+  return Engine.blockades(state)
+      .any((b) => b.seat == seat && b.square == square);
 }

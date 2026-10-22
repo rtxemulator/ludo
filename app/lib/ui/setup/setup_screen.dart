@@ -309,6 +309,16 @@ class _SetupScreenState extends State<SetupScreen> {
     final moving = rules.blockadeMovementActive;
     return [
       _rule(
+        'Form blockades from safe squares',
+        rules.formFromSafeActive,
+        (r, v) => r.copyWith(blockadeFormFromSafe: v),
+        subtitle: 'Two or more tokens on a yard exit or star square may step '
+            'out together on an even roll (half each) and form a blockade. '
+            'Safe squares never hold blockades.',
+        enabled: blockades,
+        indent: true,
+      ),
+      _rule(
         'No passing friendly blockades',
         rules.friendlyRestrictionActive,
         (r, v) => r.copyWith(blockadeFriendlyRestriction: v),

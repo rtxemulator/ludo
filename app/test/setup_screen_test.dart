@@ -182,6 +182,7 @@ void main() {
         .value;
 
     const options = [
+      'Form blockades from safe squares',
       'No passing friendly blockades',
       'Moving blockades',
       'Capture blockades',
@@ -196,6 +197,9 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
     await tester.pump();
+    // Forming blockades from safe squares comes on with the blockade rule.
+    expect(enabled('Form blockades from safe squares'), isTrue);
+    expect(on('Form blockades from safe squares'), isTrue);
     expect(enabled('No passing friendly blockades'), isTrue);
     expect(enabled('Moving blockades'), isTrue);
     expect(enabled('Piece on blockade'), isTrue);
@@ -253,6 +257,26 @@ void main() {
     expect(rules.friendlyRestrictionActive, isTrue);
     expect(rules.blockadeCaptureActive, isFalse);
     expect(played.preset, RulesPreset.custom);
+  });
+
+  testWidgets('forming blockades from safe squares can be switched off',
+      (tester) async {
+    final played = await playFrom(
+      tester,
+      edit: () async {
+        await tester.tap(find.byKey(const ValueKey('house-rules')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
+        await tester.pump();
+        await tester.tap(find
+            .byKey(const ValueKey('rule-Form blockades from safe squares')));
+        await tester.pump();
+      },
+    );
+    expect(played!.rules.blockades, isTrue);
+    expect(played.rules.blockadeFormFromSafe, isFalse);
+    expect(played.rules.formFromSafeActive, isFalse);
   });
 
   testWidgets('every edit is reported through onChanged', (tester) async {

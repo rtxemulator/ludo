@@ -641,7 +641,9 @@ class GameController extends ChangeNotifier {
               ? HapticEvent.capture
               : plan!.ring != null
                   ? HapticEvent.home
-                  : HapticEvent.tokenLand,
+                  : plan!.formed
+                      ? HapticEvent.select
+                      : HapticEvent.tokenLand,
         );
       }
       if (t >= plan!.totalMs) {

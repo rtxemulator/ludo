@@ -163,6 +163,34 @@ void main() {
     expect(game.state.tokens[0].take(2), [12, 12]);
   });
 
+  test('two tokens on the yard exit can step out as a blockade', () {
+    final game = table(r: const RulesConfig(blockades: true));
+    final base = game.state;
+    game.debugLoad(
+      GameState(
+        tokens: [
+          [0, 0, -1, -1],
+          [-1, -1, -1, -1],
+          [-1, -1, -1, -1],
+          [-1, -1, -1, -1],
+        ],
+        rules: base.rules,
+        activeSeats: base.activeSeats,
+        currentSeat: 0,
+        dice: 4,
+        rngState: 1,
+      ),
+    );
+    game.tapAt(game.resting[0][0]);
+    final unit = game.variants.indexWhere((m) => m.isUnit);
+    expect(unit, isNonNegative);
+    game.tapAt(game.variantPoints[unit]);
+    expect(game.plan!.formed, isTrue);
+    settle(game);
+    expect(game.state.tokens[0].take(2), [2, 2]);
+    expect(Engine.blockades(game.state), [(seat: 0, square: 2)]);
+  });
+
   test('AI seats play whole games with every blockade option', () {
     const all = RulesConfig(
       blockades: true,

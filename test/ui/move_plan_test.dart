@@ -1,5 +1,6 @@
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
+import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:test/test.dart';
@@ -32,6 +33,66 @@ void main() {
     expect(plan.poseOf(0, 0, plan.totalMs)!.pos, geo.trackCell(5));
     expect(plan.poseOf(0, 1, 100), isNull);
     expect(plan.poseOf(1, 0, 100), isNull);
+  });
+
+  test('forming a blockade throws wall rings and a glow from its square', () {
+    const rules = RulesConfig(blockades: true);
+    final before = makeState(
+      rules: rules,
+      tokens: {
+        0: [0, 0, -1, -1],
+      },
+      dice: 4,
+    );
+    final move = Engine.legalMoves(before).singleWhere((m) => m.isUnit);
+    final after = Engine.apply(before, move);
+    final plan = MoveAnimationPlan.plan(
+      before: before,
+      after: after,
+      move: move,
+    );
+    expect(plan.formed, isTrue);
+    expect(plan.partner, isNotNull);
+    final walls = plan.effects.rings.where((r) => r.kind == FxKind.wall);
+    expect(walls, hasLength(2));
+    expect(walls.first.seat, 0);
+    expect(plan.effects.glows, isNotEmpty);
+  });
+
+  test('a plain move, or one that does not make a pair, forms nothing', () {
+    const rules = RulesConfig(blockades: true);
+    final plain = makeState(
+      rules: rules,
+      tokens: {
+        0: [2, -1, -1, -1],
+      },
+      dice: 3,
+    );
+    expect(planFor(plain, 0).formed, isFalse);
+    // Splitting a pair by moving one token forms no blockade either.
+    final pair = makeState(
+      rules: rules,
+      tokens: {
+        0: [10, 10, -1, -1],
+      },
+      dice: 3,
+    );
+    final plan = planFor(pair, 0);
+    expect(plan.formed, isFalse);
+    expect(plan.effects.rings.where((r) => r.kind == FxKind.wall), isEmpty);
+  });
+
+  test('moving onto a token of your own forms a blockade', () {
+    const rules = RulesConfig(blockades: true);
+    final before = makeState(
+      rules: rules,
+      tokens: {
+        0: [10, 7, -1, -1],
+      },
+      dice: 3,
+    );
+    final plan = planFor(before, 1);
+    expect(plan.formed, isTrue);
   });
 
   test('yard exit uses the single exit hop from the yard spot', () {

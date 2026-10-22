@@ -12,6 +12,10 @@ void main() {
   /// Legal moves of the controlled seat for [dice].
   List<Move> moves(GameState state, int dice) => Engine.legalMoves(state, dice);
 
+  /// Moves that start on the track (a six also lets yard tokens out).
+  List<Move> trackMoves(GameState state, int dice) =>
+      moves(state, dice).where((m) => m.from != yardPosition).toList();
+
   List<Move> units(GameState state, int dice) =>
       moves(state, dice).where((m) => m.isUnit).toList();
 
@@ -24,7 +28,6 @@ void main() {
   group('option prerequisites', () {
     test('everything is off by default', () {
       const rules = RulesConfig();
-      expect(rules.blockadeSafeSquares, isFalse);
       expect(rules.blockadeFriendlyRestriction, isFalse);
       expect(rules.blockadeMovement, isFalse);
       expect(rules.blockadeCapture, isFalse);
@@ -34,14 +37,12 @@ void main() {
 
     test('without blockades no option is in force', () {
       const rules = RulesConfig(
-        blockadeSafeSquares: true,
         blockadeFriendlyRestriction: true,
         blockadeMovement: true,
         blockadeCapture: true,
         blockadeUnbreakable: true,
         pieceOnBlockade: true,
       );
-      expect(rules.safeSquaresOpenActive, isFalse);
       expect(rules.friendlyRestrictionActive, isFalse);
       expect(rules.blockadeMovementActive, isFalse);
       expect(rules.blockadeCaptureActive, isFalse);
@@ -55,15 +56,15 @@ void main() {
         blockades: true,
         blockadeCapture: true,
         blockadeUnbreakable: true,
-        blockadeSafeSquares: true,
+        pieceOnBlockade: true,
       );
       expect(rules.blockadeCaptureActive, isFalse);
       expect(rules.blockadeUnbreakableActive, isFalse);
-      expect(rules.safeSquaresOpenActive, isTrue);
+      expect(rules.pieceOnBlockadeActive, isTrue);
       final fixed = rules.normalized();
       expect(fixed.blockadeCapture, isFalse);
       expect(fixed.blockadeUnbreakable, isFalse);
-      expect(fixed.blockadeSafeSquares, isTrue);
+      expect(fixed.pieceOnBlockade, isTrue);
 
       final withMovement = rules.copyWith(blockadeMovement: true);
       expect(withMovement.blockadeCaptureActive, isTrue);
@@ -81,45 +82,59 @@ void main() {
     });
   });
 
-  group('safe squares stay open', () {
-    // Seat 1 pair on the safe square 8 (relative 47 for seat 1).
-    GameState pairOnSafe(RulesConfig rules) => makeState(
-          rules: rules,
+  group('safe squares are part of the blockade rule', () {
+    // Seat 1's pair on the star square 8 (relative 47 for seat 1).
+    GameState pairOn(int square, {int seat = 1}) => makeState(
+          rules: base,
           tokens: {
             0: [5, -1, -1, -1],
-            1: [relativeFor(1, 8), relativeFor(1, 8), -1, -1],
+            seat: [
+              relativeFor(seat, square),
+              relativeFor(seat, square),
+              -1,
+              -1
+            ],
           },
         );
 
-    test('by default a blockade on a safe square is respected', () {
-      final state = pairOnSafe(base);
-      expect(moves(state, 4), isEmpty); // would pass square 8
-      expect(moves(state, 3), isEmpty); // would land on it
-    });
-
-    test('with the option it blocks nobody there', () {
-      final rules = base.copyWith(blockadeSafeSquares: true);
-      final state = pairOnSafe(rules);
-      expect(moves(state, 4), hasLength(1));
+    test('a pair on a safe square blocks nobody', () {
+      expect(moves(pairOn(8), 4), hasLength(1)); // passes it
       final landed = Engine.apply(
-        state.copyWith(dice: 3),
-        moves(state, 3).single,
+        pairOn(8).copyWith(dice: 3),
+        moves(pairOn(8), 3).single,
       );
       // Safe square: coexistence, nobody is captured.
       expect(landed.tokens[0][0], 8);
       expect(landed.tokens[1].take(2), everyElement(relativeFor(1, 8)));
     });
 
-    test('a blockade on an ordinary square still blocks', () {
-      final rules = base.copyWith(blockadeSafeSquares: true);
+    test('a pair on a start square of another seat blocks nobody either', () {
+      // Square 13 is seat 1's start square; seat 2's pair is no blockade.
       final state = makeState(
-        rules: rules,
+        rules: base,
         tokens: {
-          0: [5, -1, -1, -1],
-          1: [relativeFor(1, 9), relativeFor(1, 9), -1, -1],
+          0: [10, -1, -1, -1],
+          2: [relativeFor(2, 13), relativeFor(2, 13), -1, -1],
         },
       );
-      expect(moves(state, 4), isEmpty);
+      expect(moves(state, 4), hasLength(1));
+    });
+
+    test('a pair on its owner\'s own start square is a blockade', () {
+      final state = makeState(
+        rules: base,
+        tokens: {
+          0: [10, -1, -1, -1],
+          1: [0, 0, -1, -1], // square 13
+        },
+      );
+      expect(moves(state, 3), isEmpty);
+      expect(moves(state, 5), isEmpty);
+      expect(moves(state, 2), hasLength(1));
+    });
+
+    test('a pair on an ordinary square blocks', () {
+      expect(moves(pairOn(9), 4), isEmpty);
     });
   });
 
@@ -286,20 +301,6 @@ void main() {
       expect(units(state, 4).where((m) => m.from == 10), isEmpty);
     });
 
-    test('it captures a lone opponent where it lands', () {
-      final state = pairAt(
-        10,
-        more: {
-          2: [relativeFor(2, 12), -1, -1, -1],
-        },
-      ).copyWith(dice: 4);
-      final after = Engine.apply(state, unitMove(state));
-      expect(after.tokens[2][0], yardPosition);
-      expect(after.tokens[0].take(2), [12, 12]);
-      // Capture grants the bonus turn.
-      expect(after.currentSeat, 0);
-    });
-
     test('a blockade can walk into the home column (and ends there)', () {
       expect(units(pairAt(50), 2).single.to, 51);
       expect(units(pairAt(50), 6).single.to, 53);
@@ -313,11 +314,39 @@ void main() {
       expect(units(inside, 2), isEmpty);
     });
 
-    test('safe squares: a pair there is no blockade, so it cannot move as one',
+    test('a pair on a safe square is no blockade, so it cannot move as one',
         () {
-      final open = rules.copyWith(blockadeSafeSquares: true);
-      expect(units(pairAt(8, r: open), 4), isEmpty);
-      expect(units(pairAt(8), 4), hasLength(1));
+      expect(units(pairAt(8), 4), isEmpty);
+    });
+
+    test('a pair on its own start square is a blockade and can move', () {
+      expect(units(pairAt(0), 4), hasLength(1));
+    });
+
+    test('it never captures a single piece, so it cannot land on one', () {
+      final state = pairAt(
+        10,
+        more: {
+          2: [relativeFor(2, 12), -1, -1, -1],
+        },
+      );
+      expect(units(state, 4), isEmpty);
+      // The single token could capture it, as always.
+      expect(singles(state, 2), hasLength(2));
+    });
+
+    test('on a safe square it may share with a single piece, no capture', () {
+      final state = makeState(
+        rules: rules,
+        tokens: {
+          0: [6, 6, -1, -1],
+          2: [relativeFor(2, 8), -1, -1, -1],
+        },
+        dice: 4,
+      );
+      final after = Engine.apply(state, unitMove(state));
+      expect(after.tokens[0].take(2), [8, 8]);
+      expect(after.tokens[2][0], relativeFor(2, 8));
     });
 
     test('the option is inert without the blockades switch', () {
@@ -387,35 +416,36 @@ void main() {
       expect(after.currentSeat, 0); // a capture earns the bonus turn
     });
 
-    test('it also takes along every other opponent on the square', () {
-      final state = makeState(
-        rules: rules,
-        tokens: {
-          0: [10, 10, -1, -1],
-          2: [relativeFor(2, 12), relativeFor(2, 12), -1, -1],
-          3: [relativeFor(3, 12), -1, -1, -1],
-        },
-      ).copyWith(dice: 4);
-      final after = Engine.apply(state, unitMove(state));
-      expect(after.tokens[2].take(2), [yardPosition, yardPosition]);
-      expect(after.tokens[3][0], yardPosition);
-    });
-
     test('without the option the same move is illegal', () {
       final off = base.copyWith(blockadeMovement: true);
       expect(units(duel(12, r: off), 4), isEmpty);
     });
 
-    test('safe squares forbid captures, blockades included', () {
-      // Seat 0 pair 6 -> 8 (a star square) onto an opponent pair.
+    test(
+        'on a safe square an opposing pair is no blockade: shared, not '
+        'captured', () {
       final state = makeState(
         rules: rules,
         tokens: {
           0: [6, 6, -1, -1],
-          1: [relativeFor(1, 8), relativeFor(1, 8), -1, -1],
+          2: [relativeFor(2, 8), relativeFor(2, 8), -1, -1],
+        },
+        dice: 4,
+      );
+      final after = Engine.apply(state, unitMove(state));
+      expect(after.tokens[0].take(2), [8, 8]);
+      expect(after.tokens[2].take(2), everyElement(relativeFor(2, 8)));
+    });
+
+    test('a blockade on its owner\'s start square is safe from capture', () {
+      final state = makeState(
+        rules: rules,
+        tokens: {
+          0: [10, 10, -1, -1],
+          1: [0, 0, -1, -1], // square 13
         },
       );
-      expect(units(state, 4), isEmpty);
+      expect(units(state, 6), isEmpty); // 10 + 3 = 13
     });
 
     test('single tokens still cannot capture a blockade', () {
@@ -529,35 +559,70 @@ void main() {
   group('piece on blockade', () {
     final rules = base.copyWith(pieceOnBlockade: true);
 
-    // Seat 0 token at 5; seat 1 pair on the ordinary square 9.
-    GameState siege({RulesConfig? r}) => makeState(
+    // Seat 0 token at 5 (and another at 8); seat 1 pair on the ordinary
+    // square 11, six squares ahead of the first token.
+    GameState siege({RulesConfig? r, List<int>? mine}) => makeState(
           rules: r ?? rules,
           tokens: {
-            0: [5, -1, -1, -1],
-            1: [relativeFor(1, 9), relativeFor(1, 9), relativeFor(1, 5), -1],
+            0: mine ?? [5, 8, -1, -1],
+            1: [relativeFor(1, 11), relativeFor(1, 11), relativeFor(1, 5), -1],
           },
         );
 
     test('by default nobody lands on an opponent blockade', () {
-      expect(moves(siege(r: base), 4), isEmpty);
+      expect(trackMoves(siege(r: base), 6), isEmpty);
     });
 
     test('with the option a single piece may land there', () {
-      expect(moves(siege(), 4), hasLength(1));
+      expect(trackMoves(siege(), 6).map((m) => m.tokenIndex), [0]);
     });
 
     test('passing the blockade is still impossible', () {
-      expect(moves(siege(), 5), isEmpty); // 5 -> 10 passes 9
+      // Token 1 (8 -> 14) would pass square 11.
+      expect(canMove(siege(), 1, 6), isFalse);
     });
 
-    test('landing captures nothing and the piece must wait', () {
-      final state = siege().copyWith(dice: 4);
-      final after = Engine.apply(state, moves(state, 4).single);
-      expect(after.tokens[0][0], 9);
-      expect(after.tokens[1].take(2), everyElement(relativeFor(1, 9)));
-      // The arrival turn is over: one more of its owner's turns to sit out.
+    test('landing captures nothing; the piece waits out the rest of the turn',
+        () {
+      final state = siege(mine: [5, -1, -1, -1]).copyWith(dice: 6);
+      final after = Engine.apply(state, trackMoves(state, 6).single);
+      expect(after.tokens[0][0], 11);
+      expect(after.tokens[1].take(2), everyElement(relativeFor(1, 11)));
+      // The six earns another roll, in which the piece cannot move.
+      expect(after.currentSeat, 0);
       expect(after.rest[0][0], 1);
       expect(after.isWaiting(0, 0), isTrue);
+      expect(canMove(after.copyWith(dice: 3), 0), isFalse);
+    });
+
+    test('and is free to move on its owner\'s very next turn', () {
+      final state = siege(mine: [5, -1, -1, -1]).copyWith(dice: 6);
+      final landed = Engine.apply(state, trackMoves(state, 6).single);
+      // The extra roll finds nothing to move: the turn ends, the wait ends.
+      final extra = Engine.roll(
+        landed.copyWith(rngState: findRngState([3])),
+      );
+      expect(extra.outcome, RollOutcome.noLegalMoves);
+      expect(extra.state.rest[0][0], 0);
+      // Seat 0's next turn: the piece moves.
+      final next = extra.state.copyWith(currentSeat: 0, dice: 3);
+      expect(canMove(next, 0), isTrue);
+    });
+
+    test('without a bonus roll it is free on the next turn at once', () {
+      // A four lands on 9 (ordinary square), no extra turn.
+      final state = makeState(
+        rules: rules,
+        tokens: {
+          0: [5, -1, -1, -1],
+          1: [relativeFor(1, 9), relativeFor(1, 9), -1, -1],
+        },
+        dice: 4,
+      );
+      final after = Engine.apply(state, moves(state, 4).single);
+      expect(after.tokens[0][0], 9);
+      expect(after.rest[0][0], 0);
+      expect(canMove(after.copyWith(currentSeat: 0, dice: 3), 0), isTrue);
     });
 
     test('a waiting piece cannot move', () {
@@ -572,26 +637,6 @@ void main() {
       );
       expect(canMove(waiting, 0, 3), isFalse);
       expect(canMove(waiting, 1, 3), isTrue);
-    });
-
-    test('it waits one full turn, then is free', () {
-      final landed = siege().copyWith(dice: 4);
-      var state = Engine.apply(landed, moves(landed, 4).single);
-      expect(state.rest[0][0], 1);
-
-      // Seat 0's next turn: the piece is stuck, the turn passes, the wait
-      // counter runs out.
-      state = state.copyWith(
-        currentSeat: 0,
-        rngState: findRngState([3]),
-      );
-      final stuck = Engine.roll(state);
-      expect(stuck.outcome, RollOutcome.noLegalMoves);
-      expect(stuck.state.rest[0][0], 0);
-
-      // And the turn after that it moves again.
-      final free = stuck.state.copyWith(currentSeat: 0, dice: 3);
-      expect(canMove(free, 0), isTrue);
     });
 
     test('the blockade owner captures the squatter with a single token', () {
@@ -624,9 +669,6 @@ void main() {
           0: [9, -1, -1, -1],
           1: [relativeFor(1, 9), relativeFor(1, 9), -1, -1],
         },
-        rest: {
-          0: [1, 0, 0, 0],
-        },
         currentSeat: 1,
         dice: 2,
       );
@@ -635,18 +677,19 @@ void main() {
       expect(after.tokens[0][0], 9); // left behind, alone and capturable
     });
 
-    test('squatting on a safe-square blockade also makes it wait', () {
+    test('a pair on its owner\'s start square can be squatted on too', () {
+      // Seat 1's start square is 13; seat 0 lands on it with a 3.
       final state = makeState(
         rules: rules,
         tokens: {
-          0: [5, -1, -1, -1],
-          1: [relativeFor(1, 8), relativeFor(1, 8), -1, -1],
+          0: [10, -1, -1, -1],
+          1: [0, 0, -1, -1],
         },
         dice: 3,
       );
       final after = Engine.apply(state, moves(state, 3).single);
-      expect(after.rest[0][0], 1);
-      expect(after.tokens[1].take(2), everyElement(relativeFor(1, 8)));
+      expect(after.tokens[0][0], 13);
+      expect(after.tokens[1].take(2), [0, 0]);
     });
 
     test('a teammate blockade is not squatted on', () {
@@ -666,7 +709,7 @@ void main() {
       expect(off.pieceOnBlockadeActive, isFalse);
     });
 
-    test('banked: a dead end reverts the squatter\'s wait too', () {
+    test('banked: the wait is part of the turn state and is restored', () {
       final banked = rules.copyWith(bankedRolls: true);
       final start = makeMoving(
         rules: banked,
@@ -677,7 +720,8 @@ void main() {
         },
       );
       final after = Engine.apply(start, Engine.legalMoves(start).single);
-      expect(after.rest[0][0], 1); // turn over, one wait left
+      expect(after.tokens[0][0], 9);
+      expect(after.rest[0][0], 0); // turn over: free next turn
       expect(start.rest[0][0], 0); // the old state is untouched
     });
   });
@@ -685,7 +729,6 @@ void main() {
   group('everything together', () {
     const all = RulesConfig(
       blockades: true,
-      blockadeSafeSquares: true,
       blockadeFriendlyRestriction: true,
       blockadeMovement: true,
       blockadeCapture: true,
@@ -738,7 +781,7 @@ void main() {
               for (var s = 0; s < 4; s++) {
                 expect(state.tokens[s], hasLength(4));
                 for (var i = 0; i < 4; i++) {
-                  expect(state.rest[s][i], inInclusiveRange(0, 2));
+                  expect(state.rest[s][i], inInclusiveRange(0, 1));
                   if (state.rest[s][i] > 0) {
                     // Only a piece on an opponent blockade ever waits.
                     expect(isOnTrack(state.tokens[s][i]), isTrue,

@@ -110,16 +110,15 @@ Covers `bankedRolls: true` (see `ludo-rules.md` section 8). Dice are seeded: tes
 
 ---
 
-## 8. Optional Blockade Rules (`test/engine/blockade_options_test.dart`)
+## 8. Safe Squares and Optional Blockade Rules (`test/engine/blockade_test.dart`, `blockade_options_test.dart`)
 
-Covers `ludo-rules.md` section 9.
+Covers `ludo-rules.md` sections 4 and 9.
 
+- **Safe squares (part of the blockade rule):** a pair on a star square or another seat's start square blocks nobody and captures nobody; a pair on its owner's own start square blocks (also when two tokens come out of the yard); an ordinary-square pair blocks.
 - **Prerequisites:** all options default off; with `blockades` off none is in force; capture and unbreakable need movement; `normalized()` switches inert options off; equality and hashing include the options.
-- **Safe squares open:** the default still respects a blockade on a safe square; with the option nobody is blocked passing or landing there (and nobody is captured); an ordinary-square blockade still blocks.
 - **Friendly restriction:** passing your own or a teammate's blockade is refused, landing allowed, the pair's own tokens unaffected, opponent blockades still impassable.
-- **Movement:** unit moves on even rolls only, half the roll each; single moves stay; exactly two tokens; jumps over opponent and restricted friendly blockades; cannot land on own / opponent blockades; captures a lone opponent (bonus turn); can enter the home column but not inside it; no unit on open safe squares; inert without `blockades`; the move log round-trips unit moves; forged unit moves are rejected.
-- **Capture:** pair beats pair (and takes every other opponent along); illegal without the option, on safe squares, against teammates, and without movement; single tokens still cannot.
+- **Movement:** unit moves on even rolls only, half the roll each; single moves stay; exactly two tokens; jumps over opponent and restricted friendly blockades; cannot land on own / opponent blockades; **never captures and cannot land on a single piece** (shares a safe square with one); a pair on its start square can move, on a star square it cannot; can enter the home column but not inside it; inert without `blockades`; the move log round-trips unit moves; forged unit moves are rejected.
+- **Capture:** pair beats pair; illegal without the option, against a start-square blockade, against teammates, and without movement; single tokens still cannot.
 - **Unbreakable:** no single moves for a pair on a non-safe square; odd rolls leave it; other tokens free; splittable on a safe square (also right after reaching it) and as a stack of three; inert without movement.
-- **Piece on blockade:** landing allowed only with the option and only on the destination; no capture; the wait counter (arrival turn plus one full turn); waiting pieces cannot move; the blockade's owner captures it with a single token; a moving blockade leaves it behind; safe-square case; teammates excluded; banked state is not mutated.
+- **Piece on blockade:** landing allowed only with the option and only on the destination; no capture; **the piece cannot move during the rest of its arrival turn (extra roll) and moves on its owner's very next turn**; a landing without a bonus roll leaves it free next turn; the blockade's owner captures it with a single token; a moving blockade leaves it behind; a start-square blockade can be squatted on; teammates excluded.
 - **Playouts:** 25 random games for each of ten option combinations (all on, quick, movement only, capture, unbreakable, squatting, friendly, banked, teams, banked teams; 2/3/4 seats) always finish, keep wait counters in range and replay exactly from seed + log.
-

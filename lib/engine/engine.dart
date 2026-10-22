@@ -341,6 +341,17 @@ abstract final class Engine {
     return moves;
   }
 
+  /// How many tokens of [seat] stand on absolute [square].
+  static int _countAt(GameState state, int seat, int square) {
+    var count = 0;
+    for (final position in state.tokens[seat]) {
+      if (isOnTrack(position) && absoluteSquare(seat, position) == square) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   /// Whether a moving blockade of [owner] may stop at relative [to].
   static bool _unitMayLand(
     GameState state,
@@ -352,6 +363,16 @@ abstract final class Engine {
       return true; // home column and finish hold no blockades
     }
     final square = absoluteSquare(owner, to);
+    if (!isSafeSquare(square)) {
+      // A moving blockade never captures a single piece, so it cannot land
+      // on one.
+      for (final seat in state.activeSeats) {
+        if (state.unitOf(seat) != state.unitOf(owner) &&
+            _countAt(state, seat, square) == 1) {
+          return false;
+        }
+      }
+    }
     final holders = blockades[square];
     if (holders == null) {
       return true;
@@ -459,10 +480,10 @@ abstract final class Engine {
   }
 
   /// Absolute square -> seats that hold a blockade there (2+ of their own
-  /// tokens). Several seats only share a square when it is a safe one. With
-  /// `blockadeSafeSquares` a pair on a safe square is no blockade at all.
+  /// tokens). Safe squares never hold blockades (they stay open to everyone),
+  /// with one exception: a seat's own start square, where a pair that came
+  /// out of the yard does form a blockade.
   static Map<int, List<int>> _blockadeMap(GameState state) {
-    final open = state.rules.safeSquaresOpenActive;
     final result = <int, List<int>>{};
     for (final seat in state.activeSeats) {
       final counts = <int, int>{};
@@ -473,7 +494,9 @@ abstract final class Engine {
         }
       }
       counts.forEach((square, count) {
-        if (count >= 2 && !(open && isSafeSquare(square))) {
+        final open = isSafeSquare(square) &&
+            square != absoluteSquare(seat, startPosition);
+        if (count >= 2 && !open) {
           (result[square] ??= []).add(seat);
         }
       });
@@ -678,13 +701,18 @@ abstract final class Engine {
           }
         }
         if (shielded.isNotEmpty) {
-          rest[owner][chosen.tokenIndex] = 2;
+          rest[owner][chosen.tokenIndex] = 1;
         }
       }
       if (!isSafeSquare(square)) {
         for (final seat in state.activeSeats) {
           if (state.unitOf(seat) == state.unitOf(owner) ||
               shielded.contains(seat)) {
+            continue;
+          }
+          // A moving blockade only ever captures blockades, never a single
+          // piece (such a landing is not legal in the first place).
+          if (chosen.isUnit && _countAt(state, seat, square) < 2) {
             continue;
           }
           for (var i = 0; i < tokensPerSeat; i++) {

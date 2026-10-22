@@ -166,7 +166,6 @@ void main() {
   test('AI seats play whole games with every blockade option', () {
     const all = RulesConfig(
       blockades: true,
-      blockadeSafeSquares: true,
       blockadeFriendlyRestriction: true,
       blockadeMovement: true,
       blockadeCapture: true,

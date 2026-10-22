@@ -182,7 +182,6 @@ void main() {
         .value;
 
     const options = [
-      'Safe squares stay open',
       'No passing friendly blockades',
       'Moving blockades',
       'Capture blockades',
@@ -197,7 +196,6 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
     await tester.pump();
-    expect(enabled('Safe squares stay open'), isTrue);
     expect(enabled('No passing friendly blockades'), isTrue);
     expect(enabled('Moving blockades'), isTrue);
     expect(enabled('Piece on blockade'), isTrue);
@@ -244,15 +242,15 @@ void main() {
         await tester
             .tap(find.byKey(const ValueKey('rule-Unbreakable blockades')));
         await tester.pump();
-        await tester
-            .tap(find.byKey(const ValueKey('rule-Safe squares stay open')));
+        await tester.tap(
+            find.byKey(const ValueKey('rule-No passing friendly blockades')));
         await tester.pump();
       },
     );
     final rules = played!.rules;
     expect(rules.blockadeMovementActive, isTrue);
     expect(rules.blockadeUnbreakableActive, isTrue);
-    expect(rules.safeSquaresOpenActive, isTrue);
+    expect(rules.friendlyRestrictionActive, isTrue);
     expect(rules.blockadeCaptureActive, isFalse);
     expect(played.preset, RulesPreset.custom);
   });

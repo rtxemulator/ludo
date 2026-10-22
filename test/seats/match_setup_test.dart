@@ -277,7 +277,8 @@ void main() {
     test('a blockade option makes the strategic preset custom', () {
       expect(
         RulesPreset.of(
-          const RulesConfig.strategic().copyWith(blockadeSafeSquares: true),
+          const RulesConfig.strategic()
+              .copyWith(blockadeFriendlyRestriction: true),
         ),
         RulesPreset.custom,
       );
@@ -317,7 +318,6 @@ void main() {
         blockades: true,
         teamsEnabled: true,
         bankedRolls: true,
-        blockadeSafeSquares: true,
         blockadeFriendlyRestriction: true,
         blockadeMovement: true,
         blockadeCapture: true,

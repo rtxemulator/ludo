@@ -72,11 +72,49 @@ void main() {
       expect(after.tokens[1][0], yardPosition);
     });
 
-    test('on a safe square are fully respected', () {
+    test('on a safe square block nobody (safe squares stay open)', () {
       final landing = opponentBlockade(8).copyWith(dice: 3);
-      expect(canMove(landing, 0), isFalse);
+      expect(canMove(landing, 0), isTrue);
       final passing = opponentBlockade(8).copyWith(dice: 4);
-      expect(canMove(passing, 0), isFalse);
+      expect(canMove(passing, 0), isTrue);
+      // Sharing the safe square captures nobody.
+      final after = play(landing, 0);
+      expect(after.tokens[1].take(2), everyElement(relativeFor(1, 8)));
+    });
+
+    test(
+        'on the owner\'s own start square they do block (formed out of '
+        'the yard)', () {
+      // Seat 1's start square is absolute 13.
+      GameState atStart(int d) => makeState(
+            rules: blockadeRules,
+            tokens: {
+              0: [10, -1, -1, -1],
+              1: [0, 0, -1, -1],
+            },
+            dice: d,
+          );
+      expect(canMove(atStart(3), 0), isFalse); // lands on 13
+      expect(canMove(atStart(5), 0), isFalse); // passes 13
+      expect(canMove(atStart(2), 0), isTrue); // stops short of it
+    });
+
+    test(
+        'a pair of the owner forms from the yard square: two tokens leaving '
+        'the yard make a blockade at once', () {
+      final state = makeState(
+        rules: blockadeRules,
+        tokens: {
+          1: [0, -1, -1, -1],
+          0: [10, -1, -1, -1],
+        },
+        currentSeat: 1,
+        dice: 6,
+      );
+      final after = play(state, 1); // second token leaves the yard
+      expect(after.tokens[1].take(2), [0, 0]);
+      final next = after.copyWith(currentSeat: 0, dice: 5);
+      expect(canMove(next, 0), isFalse); // 10 -> 15 passes square 13
     });
 
     test('on the last track square block the way into the home column', () {
@@ -94,7 +132,10 @@ void main() {
       expect(canMove(at48(6), 0), isFalse); // 54, passes 50
     });
 
-    test('on the start square keep a yard token inside', () {
+    test(
+        'of another seat on this start square do not keep a yard token '
+        'inside', () {
+      // A pair on a start square that is not their own is on a safe square.
       final state = makeState(
         rules: blockadeRules,
         tokens: {
@@ -102,7 +143,7 @@ void main() {
         },
         dice: 6,
       );
-      expect(Engine.legalMoves(state), isEmpty);
+      expect(Engine.legalMoves(state), isNotEmpty);
     });
 
     test('block every opposing seat, not only the next one', () {

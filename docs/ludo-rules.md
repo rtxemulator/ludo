@@ -29,7 +29,6 @@ class RulesConfig {
   final bool teamsEnabled;        // derived from SeatConfig
   final bool bankedRolls;         // default: false (stacking dice, see section 8)
   // Optional blockade rules (section 9); all default to false, all need `blockades`.
-  final bool blockadeSafeSquares;
   final bool blockadeFriendlyRestriction;
   final bool blockadeMovement;
   final bool blockadeCapture;         // also needs blockadeMovement
@@ -103,6 +102,7 @@ class RulesConfig {
   - An opponent token cannot pass over or land on a blockade.
   - Teammates are permitted to pass through friendly blockades, but cannot land on the same square unless it is a designated safe square.
   - Your own blockade can be passed and landed on (a third token may join it).
+  - **Safe squares stay open (part of the blockade rule itself, not an option):** a pair on a safe square is not a blockade: it blocks nobody and nobody is restricted there (tokens of different players share safe squares as always). The one exception is a seat's **own start square** (the yard exit): a pair of its owner standing there *is* a blockade, so two tokens leaving the yard can form one at once. A pair on another seat's start square or on a star square is not.
   - The optional blockade rules of section 9 refine all of this; with none of them on, exactly the rules above apply.
 
 ---
@@ -202,50 +202,46 @@ There is no cap on the bank. Example: bank `6,6,x` -> spend `x` to capture -> bo
 
 ## 9. Optional Blockade Rules (`blockades: true` only)
 
-Six independent-looking switches that only exist while `blockades` is on. **Prerequisites:** `blockadeCapture` and `blockadeUnbreakable` need `blockadeMovement`; the others need only `blockades`. A switch whose prerequisite is off is *inert* (the engine reads the `...Active` getters of `RulesConfig`) and the setup screen shows it disabled; `RulesConfig.normalized()` (applied by `MatchSetup`) switches such options off.
+Five switches that only exist while `blockades` is on. **Prerequisites:** `blockadeCapture` and `blockadeUnbreakable` need `blockadeMovement`; the others need only `blockades`. A switch whose prerequisite is off is *inert* (the engine reads the `...Active` getters of `RulesConfig`) and the setup screen shows it disabled; `RulesConfig.normalized()` (applied by `MatchSetup`) switches such options off. The base blockade rules, including the open safe squares of section 4, always apply.
 
-A **blockade** is two or more tokens of one seat on the same track square. A **pair** is exactly two. Home-column squares never hold blockades.
+A **blockade** is two or more tokens of one seat on the same track square (subject to the safe-square rule of section 4). A **pair** is exactly two. Home-column squares never hold blockades.
 
-### 9.1 Safe squares stay open (`blockadeSafeSquares`)
+### 9.1 Friendly blockade restriction (`blockadeFriendlyRestriction`)
 
-A pair standing on a safe square is not a blockade: it blocks nobody, nobody is restricted there, and tokens of different players coexist as on any safe square. (Because it is no blockade, such a pair also cannot move as a unit under 9.3.) Without the option a blockade on a safe square blocks like any other.
+You may not pass a blockade of your own or of a teammate (only moves that *end* before it are allowed). Landing rules are unchanged: you may land on your own blockade; a teammate may not land on yours unless the square is safe. A moving blockade (9.2) ignores this, as it ignores every blockade on its way. Opponent blockades stay impassable.
 
-### 9.2 Friendly blockade restriction (`blockadeFriendlyRestriction`)
-
-You may not pass a blockade of your own or of a teammate (only moves that *end* before it are allowed). Landing rules are unchanged: you may land on your own blockade; a teammate may not land on yours unless the square is safe. A moving blockade (9.3) ignores this, as it ignores every blockade on its way. Opponent blockades stay impassable.
-
-### 9.3 Blockade movement (`blockadeMovement`)
+### 9.2 Blockade movement (`blockadeMovement`)
 
 A **pair** may also move **as a unit**:
 
 - only on an **even** roll `d`; each of the two tokens advances `d / 2` squares (2 -> 1, 4 -> 2, 6 -> 3), with the usual end-of-track rules (a pair may enter the home column; it stops being a blockade there; it cannot finish in one move);
 - it **jumps over** every blockade on the way (opponent, friendly, restricted);
-- it **may not land** on a blockade of its own, on a teammate's blockade (unless the square is safe), or on an opponent blockade (unless 9.4 allows it);
-- a lone opponent where it lands is captured as usual (non-safe squares); a capture grants the usual bonus turn;
-- exactly two tokens: three or more on a square do not move as a unit; a waiting token (9.6) cannot be part of one;
-- the single-token moves stay legal (the pair may be split) unless 9.5 forbids it.
+- it **may not land** on a blockade of its own, on a teammate's blockade (unless the square is safe), or on an opponent blockade (unless 9.3 allows it);
+- it **never captures a single piece**, so it cannot land on a single opponent token on an ordinary square (on a safe square it may share with one; a capture of a blockade is 9.3);
+- exactly two tokens: three or more on a square do not move as a unit; a waiting token (9.5) cannot be part of one; a pair that is no blockade (on a star square or another seat's start square) cannot move as one;
+- the single-token moves stay legal (the pair may be split) unless 9.4 forbids it.
 
 Engine representation: `Move.partnerIndex >= 0` (`Move.isUnit`) with `tokenIndex` the lower index; the log entry carries `MoveLogEntry.unit`. In banked-roll games a unit move spends one die like any other move.
 
-### 9.4 Blockade capture (`blockadeCapture`, needs 9.3)
+### 9.3 Blockade capture (`blockadeCapture`, needs 9.2)
 
-A moving blockade that lands on an opponent blockade on a **non-safe** square captures it: every opponent token on that square goes back to its yard (a capture, so the bonus turn applies). Single tokens still cannot capture a blockade, and blockades on safe squares are never captured. Teammate blockades are never captured.
+A moving blockade that lands on an opponent blockade on a **non-safe** square captures it: every token of that blockade goes back to its yard (a capture, so the bonus turn applies). Single tokens still cannot capture a blockade, and a blockade on its owner's start square (a safe square) is never captured. Teammate blockades are never captured.
 
-### 9.5 Unbreakable blockade (`blockadeUnbreakable`, needs 9.3)
+### 9.4 Unbreakable blockade (`blockadeUnbreakable`, needs 9.2)
 
-A pair on a **non-safe** square cannot be split: its tokens can only move together (so only on even rolls; an odd roll leaves the pair where it is). Once the pair stands on a safe square it may be split again. A stack of three or more may lose a token (a pair stays behind). A blockade can still be broken by capture.
+A pair on a **non-safe** square cannot be split: its tokens can only move together (so only on even rolls; an odd roll leaves the pair where it is). Once the pair stands on a safe square (for instance its start square) it may be split again. A stack of three or more may lose a token (a pair stays behind). A blockade can still be broken by capture.
 
-### 9.6 Piece on blockade (`pieceOnBlockade`)
+### 9.5 Piece on blockade (`pieceOnBlockade`)
 
 *Interpretation (the request was short; this is the reading implemented):* a **single piece** (an ordinary single-token move) may land on a square held by an **opponent's** blockade, which normally is impassable. It is the one way to "get onto" an enemy blockade:
 
-- landing captures nothing, and the blockade stays intact (a pair that lands there is a blockade capture, 9.4, not this rule);
-- the piece **waits one full turn**: it cannot move for the rest of the turn it arrived in and for its owner's whole next turn; it is free from the turn after (`GameState.rest`: set to 2 on arrival, decremented at the end of each turn of its controlling seat; waiting pieces cannot move alone or in a unit);
-- it is **not protected**: a **single** token of the blockade's owner landing on the square captures it (the owner may land on their own blockade). Nobody else can land there. A banked-roll dead end restores the wait counters with the rest of the board;
+- landing captures nothing, and the blockade stays intact (a pair that lands there is a blockade capture, 9.3, not this rule);
+- the piece **cannot move for the rest of the turn it arrived in** (for example the extra roll a six or a capture earns); it is **free on its owner's very next turn** (`GameState.rest` is set to 1 on arrival and counts down at the end of the turn; a waiting piece cannot move alone or in a unit; a banked-roll dead end restores the counter with the rest of the board);
+- it is **not protected**: a **single** token of the blockade's owner landing on the square captures it (the owner may land on their own blockade). Nobody else can land there;
 - passing the blockade is still impossible; only landing on it is allowed;
-- if the blockade **moves away** (9.3), the piece is **left behind** and is then just a lone piece on an ordinary square (capturable by any opponent single piece);
-- teammate blockades cannot be squatted on; on a safe-square blockade the piece also waits (no capture can happen there).
+- if the blockade **moves away** (9.2), the piece is **left behind** and is then just a lone piece on an ordinary square (capturable by any opponent single piece);
+- teammate blockades cannot be squatted on; a blockade on its owner's start square can be (no capture can happen there).
 
-### 9.7 Combinations worth knowing
+### 9.6 Combinations worth knowing
 
-Moving + unbreakable gives walls that only advance on even rolls. Moving + capture makes a wall a battering ram. Friendly restriction + unbreakable can freeze your own tokens behind a wall that cannot move on odd rolls; the engine just passes the turn when nothing is legal. Safe squares open + unbreakable: a pair that reaches a safe square is simply two tokens again.
+Moving + unbreakable gives walls that only advance on even rolls. Moving + capture makes a wall a battering ram against other walls (never against single pieces). Friendly restriction + unbreakable can freeze your own tokens behind a wall that cannot move on odd rolls; the engine just passes the turn when nothing is legal. A pair on its start square is a wall that opponents cannot pass, yet it can split again at once.

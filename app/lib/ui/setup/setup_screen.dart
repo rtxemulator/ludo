@@ -309,14 +309,6 @@ class _SetupScreenState extends State<SetupScreen> {
     final moving = rules.blockadeMovementActive;
     return [
       _rule(
-        'Safe squares stay open',
-        rules.safeSquaresOpenActive,
-        (r, v) => r.copyWith(blockadeSafeSquares: v),
-        subtitle: 'A pair standing on a safe square blocks nobody.',
-        enabled: blockades,
-        indent: true,
-      ),
-      _rule(
         'No passing friendly blockades',
         rules.friendlyRestrictionActive,
         (r, v) => r.copyWith(blockadeFriendlyRestriction: v),
@@ -338,7 +330,7 @@ class _SetupScreenState extends State<SetupScreen> {
         rules.blockadeCaptureActive,
         (r, v) => r.copyWith(blockadeCapture: v),
         subtitle: 'A moving blockade landing on an opponent blockade '
-            'captures it. Needs moving blockades.',
+            'captures it (never a single piece). Needs moving blockades.',
         enabled: moving,
         indent: true,
       ),
@@ -355,8 +347,8 @@ class _SetupScreenState extends State<SetupScreen> {
         'Piece on blockade',
         rules.pieceOnBlockadeActive,
         (r, v) => r.copyWith(pieceOnBlockade: v),
-        subtitle: 'A single piece may land on an opponent blockade. It waits '
-            "a full turn, and a single token of the blockade's owner "
+        subtitle: 'A single piece may land on an opponent blockade but cannot '
+            "move again that turn. A single token of the blockade's owner "
             'landing there captures it.',
         enabled: blockades,
         indent: true,

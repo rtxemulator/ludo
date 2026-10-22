@@ -97,7 +97,6 @@ void main() {
   group('GreedyBot with the blockade options', () {
     const all = RulesConfig(
       blockades: true,
-      blockadeSafeSquares: true,
       blockadeFriendlyRestriction: true,
       blockadeMovement: true,
       blockadeCapture: true,

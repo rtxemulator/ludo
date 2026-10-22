@@ -25,7 +25,6 @@ class RulesConfig {
     this.blockades = false,
     this.teamsEnabled = false,
     this.bankedRolls = false,
-    this.blockadeSafeSquares = false,
     this.blockadeFriendlyRestriction = false,
     this.blockadeMovement = false,
     this.blockadeCapture = false,
@@ -94,10 +93,6 @@ class RulesConfig {
   // flag can never switch a rule on by itself. See `docs/ludo-rules.md`
   // section 9.
 
-  /// Safe squares stay open: a pair standing on a safe square is not a
-  /// blockade (it blocks nobody and nobody is restricted there).
-  final bool blockadeSafeSquares;
-
   /// Nobody may pass a blockade of their own or of a teammate (landing
   /// rules are unchanged).
   final bool blockadeFriendlyRestriction;
@@ -108,7 +103,8 @@ class RulesConfig {
   final bool blockadeMovement;
 
   /// A moving blockade that lands on an opponent blockade (on a non-safe
-  /// square) captures it. Needs [blockadeMovement].
+  /// square) captures it. (A moving blockade never captures a single piece
+  /// and cannot land on one.) Needs [blockadeMovement].
   final bool blockadeCapture;
 
   /// A two-piece blockade on a non-safe square cannot be split: its tokens
@@ -117,13 +113,11 @@ class RulesConfig {
   final bool blockadeUnbreakable;
 
   /// A single piece may land on a square held by an opponent's blockade
-  /// without capturing it. It then sits there for one full turn of its
-  /// owner and can be captured by a single token of the blockade's owner
-  /// landing on the square; if the blockade moves away it stays behind.
+  /// without capturing it. It cannot move for the rest of the turn it
+  /// arrives in (it is free from its owner's next turn) and can be captured
+  /// by a single token of the blockade's owner landing on the square; if the
+  /// blockade moves away it stays behind.
   final bool pieceOnBlockade;
-
-  /// Safe-square option, in force.
-  bool get safeSquaresOpenActive => blockades && blockadeSafeSquares;
 
   /// Friendly-blockade restriction, in force.
   bool get friendlyRestrictionActive =>
@@ -147,7 +141,6 @@ class RulesConfig {
   /// unbreakable without [blockadeMovement]).
   RulesConfig normalized() {
     return copyWith(
-      blockadeSafeSquares: safeSquaresOpenActive,
       blockadeFriendlyRestriction: friendlyRestrictionActive,
       blockadeMovement: blockadeMovementActive,
       blockadeCapture: blockadeCaptureActive,
@@ -168,7 +161,6 @@ class RulesConfig {
     bool? blockades,
     bool? teamsEnabled,
     bool? bankedRolls,
-    bool? blockadeSafeSquares,
     bool? blockadeFriendlyRestriction,
     bool? blockadeMovement,
     bool? blockadeCapture,
@@ -187,7 +179,6 @@ class RulesConfig {
       blockades: blockades ?? this.blockades,
       teamsEnabled: teamsEnabled ?? this.teamsEnabled,
       bankedRolls: bankedRolls ?? this.bankedRolls,
-      blockadeSafeSquares: blockadeSafeSquares ?? this.blockadeSafeSquares,
       blockadeFriendlyRestriction:
           blockadeFriendlyRestriction ?? this.blockadeFriendlyRestriction,
       blockadeMovement: blockadeMovement ?? this.blockadeMovement,
@@ -211,7 +202,6 @@ class RulesConfig {
       other.blockades == blockades &&
       other.teamsEnabled == teamsEnabled &&
       other.bankedRolls == bankedRolls &&
-      other.blockadeSafeSquares == blockadeSafeSquares &&
       other.blockadeFriendlyRestriction == blockadeFriendlyRestriction &&
       other.blockadeMovement == blockadeMovement &&
       other.blockadeCapture == blockadeCapture &&
@@ -231,7 +221,6 @@ class RulesConfig {
         blockades,
         teamsEnabled,
         bankedRolls,
-        blockadeSafeSquares,
         blockadeFriendlyRestriction,
         blockadeMovement,
         blockadeCapture,
@@ -250,7 +239,6 @@ class RulesConfig {
       '${blockades ? ', blockade options: ${_optionNames().join(' ')}' : ''})';
 
   List<String> _optionNames() => [
-        if (blockadeSafeSquares) 'safeSquares',
         if (blockadeFriendlyRestriction) 'friendlyRestriction',
         if (blockadeMovement) 'movement',
         if (blockadeCapture) 'capture',

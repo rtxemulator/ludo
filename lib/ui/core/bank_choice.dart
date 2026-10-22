@@ -21,14 +21,19 @@ enum TokenTapKind {
   /// The token could use several dice and none is selected (or the selected
   /// one does not fit): the tray prompts the player to pick a die.
   prompt,
+
+  /// The token has several ways to spend the die (alone, or together with
+  /// its blockade partner): [TokenTapResult.moves] to choose from.
+  variants,
 }
 
 class TokenTapResult {
-  const TokenTapResult(this.kind, {this.move, this.chip});
+  const TokenTapResult(this.kind, {this.move, this.chip, this.moves});
 
   final TokenTapKind kind;
   final Move? move;
   final int? chip;
+  final List<Move>? moves;
 }
 
 /// The spend decision of one moving phase.
@@ -124,31 +129,36 @@ class BankChoice {
   TokenTapResult tapToken(int owner, int tokenIndex) {
     final mine = [
       for (final m in legal)
-        if (m.owner == owner && m.tokenIndex == tokenIndex) m,
+        if (m.owner == owner && m.moves(tokenIndex)) m,
     ];
     if (mine.isEmpty) {
       return const TokenTapResult(TokenTapKind.none);
     }
+    final values = {for (final m in mine) valueOf(m)};
     final sel = selected;
     if (sel != null) {
       final value = bank[sel];
-      for (final m in mine) {
-        if (valueOf(m) == value) {
-          return TokenTapResult(
-            TokenTapKind.spend,
-            move: _with(m, sel),
-          );
-        }
+      final fits = [
+        for (final m in mine)
+          if (valueOf(m) == value) _with(m, sel),
+      ];
+      if (fits.length == 1) {
+        return TokenTapResult(TokenTapKind.spend, move: fits.single);
       }
-      if (mine.length == 1) {
-        final chip = bank.indexOf(valueOf(mine.single));
+      if (fits.length > 1) {
+        return TokenTapResult(TokenTapKind.variants, moves: fits);
+      }
+      if (values.length == 1) {
+        final chip = bank.indexOf(values.single);
         selected = chip;
         return TokenTapResult(TokenTapKind.select, chip: chip);
       }
       return const TokenTapResult(TokenTapKind.prompt);
     }
-    if (mine.length == 1) {
-      return TokenTapResult(TokenTapKind.spend, move: mine.single);
+    if (values.length == 1) {
+      return mine.length == 1
+          ? TokenTapResult(TokenTapKind.spend, move: mine.single)
+          : TokenTapResult(TokenTapKind.variants, moves: mine);
     }
     return const TokenTapResult(TokenTapKind.prompt);
   }
@@ -159,5 +169,6 @@ class BankChoice {
         from: m.from,
         to: m.to,
         dieIndex: dieIndex,
+        partnerIndex: m.partnerIndex,
       );
 }

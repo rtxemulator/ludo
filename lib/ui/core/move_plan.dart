@@ -33,7 +33,9 @@ class MoveAnimationPlan {
   const MoveAnimationPlan._({
     required this.owner,
     required this.tokenIndex,
+    required this.partnerIndex,
     required this.mover,
+    required this.partner,
     required this.victims,
     required this.ring,
     required this.effects,
@@ -74,6 +76,22 @@ class MoveAnimationPlan {
       toFinish: reachedHome,
       spec: spec,
     );
+    // A moving blockade carries its partner along the same way.
+    TokenTimeline? partner;
+    if (move.isUnit) {
+      final other = move.partnerIndex;
+      final partnerPath = <Pt>[restBefore[owner][other]];
+      for (var p = from + 1; p < to; p++) {
+        partnerPath.add(geometry.cellCenter(owner, p, other));
+      }
+      partnerPath.add(restAfter[owner][other]);
+      partner = TokenTimeline.hop(
+        path: partnerPath,
+        fromYard: false,
+        toFinish: false,
+        spec: spec,
+      );
+    }
 
     final victims = <VictimAnimation>[];
     for (var seat = 0; seat < seatCount; seat++) {
@@ -134,7 +152,9 @@ class MoveAnimationPlan {
     return MoveAnimationPlan._(
       owner: owner,
       tokenIndex: index,
+      partnerIndex: move.partnerIndex,
       mover: mover,
+      partner: partner,
       victims: victims,
       ring: ring,
       effects: effects,
@@ -144,7 +164,13 @@ class MoveAnimationPlan {
 
   final int owner;
   final int tokenIndex;
+
+  /// The second token of a moving blockade, or `-1`.
+  final int partnerIndex;
   final TokenTimeline mover;
+
+  /// The timeline of the partner token (moving blockades only).
+  final TokenTimeline? partner;
   final List<VictimAnimation> victims;
 
   /// Present only when the move finished a token.
@@ -162,6 +188,9 @@ class MoveAnimationPlan {
   TokenPose? poseOf(int seat, int index, double tMs) {
     if (seat == owner && index == tokenIndex) {
       return mover.sample(tMs);
+    }
+    if (seat == owner && index == partnerIndex && partner != null) {
+      return partner!.sample(tMs);
     }
     for (final v in victims) {
       if (v.seat == seat && v.tokenIndex == index) {
@@ -261,6 +290,19 @@ PlanEffects _effects({
     rings.add(
       FxRing(
         ring: RingFx.dust(center: land, startMs: impact, spec: spec),
+        seat: owner,
+        kind: FxKind.dust,
+      ),
+    );
+  }
+  if (move.isUnit) {
+    rings.add(
+      FxRing(
+        ring: RingFx.dust(
+          center: restAfter[owner][move.partnerIndex],
+          startMs: impact,
+          spec: spec,
+        ),
         seat: owner,
         kind: FxKind.dust,
       ),

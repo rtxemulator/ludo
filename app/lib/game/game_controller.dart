@@ -223,6 +223,7 @@ class GameController extends ChangeNotifier {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
     state = _setup.newGame(s);
     _aiDueMs = null;
+    _clearVariants();
     phase = GamePhase.awaitingRoll;
     legal = const [];
     lastRoll = null;
@@ -250,6 +251,29 @@ class GameController extends ChangeNotifier {
     prevActiveSeat = null;
     activeSinceMs = -1e9;
     _refreshLayout();
+    notifyListeners();
+  }
+
+  /// Test hook: puts the table in [loaded] (a state with a pending die or,
+  /// with banked rolls, in the moving phase) as if it had been rolled.
+  @visibleForTesting
+  void debugLoad(GameState loaded) {
+    state = loaded;
+    diceSeat = loaded.currentSeat;
+    rollerSeat = diceSeat;
+    _clearVariants();
+    _refreshLayout();
+    if (loaded.awaitingMove) {
+      if (banked) {
+        _enterMoving();
+      } else {
+        legal = Engine.legalMoves(loaded);
+        phase = GamePhase.awaitingMove;
+      }
+    } else {
+      legal = const [];
+      phase = GamePhase.awaitingRoll;
+    }
     notifyListeners();
   }
 
@@ -358,24 +382,89 @@ class GameController extends ChangeNotifier {
     if (phase != GamePhase.awaitingMove) {
       return false;
     }
+    if (variants.isNotEmpty) {
+      final picked = _pickVariant(grid);
+      _clearVariants();
+      if (picked != null) {
+        _startMove(picked);
+        return true;
+      }
+      notifyListeners();
+    }
     if (banked) {
       return _tapBanked(grid);
     }
-    Move? best;
-    var bestDistance = 0.8;
-    for (final move in legal) {
-      final d = resting[move.owner][move.tokenIndex].distanceTo(grid);
-      if (d <= bestDistance) {
-        bestDistance = d;
-        best = move;
-      }
-    }
-    if (best == null) {
+    final token = _nearestToken(legal, grid);
+    if (token == null) {
       _illegalTap(grid);
       return false;
     }
-    _startMove(best);
-    return true;
+    final mine = [
+      for (final m in legal)
+        if (m.owner == token.$1 && m.moves(token.$2)) m,
+    ];
+    if (mine.length == 1) {
+      _startMove(mine.single);
+      return true;
+    }
+    _promptVariants(mine);
+    return false;
+  }
+
+  /// The token (owner, index) of [moves] nearest to [grid], within reach of a
+  /// tap; both tokens of a moving blockade count.
+  (int, int)? _nearestToken(Iterable<Move> moves, Pt grid) {
+    (int, int)? best;
+    var bestDistance = 0.8;
+    for (final move in moves) {
+      for (final index in [
+        move.tokenIndex,
+        if (move.isUnit) move.partnerIndex,
+      ]) {
+        final d = resting[move.owner][index].distanceTo(grid);
+        if (d <= bestDistance) {
+          bestDistance = d;
+          best = (move.owner, index);
+        }
+      }
+    }
+    return best;
+  }
+
+  /// Moves a tapped token (or blockade) could make: when it is more than
+  /// one, the destinations are shown as markers and the next tap on one of
+  /// them chooses. Empty when no choice is pending.
+  List<Move> variants = const [];
+
+  /// Where each of [variants] ends (board grid points, same order).
+  List<Pt> variantPoints = const [];
+
+  void _promptVariants(List<Move> moves) {
+    variants = moves;
+    variantPoints = [
+      for (final m in moves)
+        _geo.restingPoints(Engine.apply(state, m))[m.owner][m.tokenIndex],
+    ];
+    feedback.play(HapticEvent.select);
+    notifyListeners();
+  }
+
+  void _clearVariants() {
+    variants = const [];
+    variantPoints = const [];
+  }
+
+  Move? _pickVariant(Pt grid) {
+    Move? best;
+    var bestDistance = 0.9;
+    for (var k = 0; k < variants.length; k++) {
+      final d = variantPoints[k].distanceTo(grid);
+      if (d <= bestDistance) {
+        bestDistance = d;
+        best = variants[k];
+      }
+    }
+    return best;
   }
 
   /// Banked rolls: a tap on the board while dice are to be spent. A token
@@ -386,21 +475,16 @@ class GameController extends ChangeNotifier {
     if (c == null) {
       return false;
     }
-    Move? best;
-    var bestDistance = 0.8;
-    for (final move in c.legal) {
-      final d = resting[move.owner][move.tokenIndex].distanceTo(grid);
-      if (d <= bestDistance) {
-        bestDistance = d;
-        best = move;
-      }
-    }
-    if (best == null) {
+    final token = _nearestToken(c.legal, grid);
+    if (token == null) {
       _illegalTap(grid);
       return false;
     }
-    final result = c.tapToken(best.owner, best.tokenIndex);
+    final result = c.tapToken(token.$1, token.$2);
     switch (result.kind) {
+      case TokenTapKind.variants:
+        _promptVariants(result.moves!);
+        return false;
       case TokenTapKind.spend:
         _startMove(result.move!);
         return true;
@@ -431,6 +515,7 @@ class GameController extends ChangeNotifier {
       return;
     }
     if (c.tapChip(chip)) {
+      _clearVariants();
       _syncSelection();
       feedback.play(HapticEvent.select);
       notifyListeners();
@@ -451,14 +536,28 @@ class GameController extends ChangeNotifier {
   /// Tokens whose glow is drawn: the moves of the selected chip (every legal
   /// move while none is selected), one entry per token.
   List<Move> get glowMoves {
-    if (!banked) {
-      return legal;
-    }
+    final source = banked ? choice?.glowMoves ?? const <Move>[] : legal;
     final seen = <int>{};
-    return [
-      for (final m in choice?.glowMoves ?? const <Move>[])
-        if (seen.add(m.owner * tokensPerSeat + m.tokenIndex)) m,
-    ];
+    final glowing = <Move>[];
+    for (final m in source) {
+      // Both tokens of a moving blockade glow.
+      for (final index in [m.tokenIndex, if (m.isUnit) m.partnerIndex]) {
+        if (seen.add(m.owner * tokensPerSeat + index)) {
+          glowing.add(
+            index == m.tokenIndex
+                ? m
+                : Move(
+                    owner: m.owner,
+                    tokenIndex: index,
+                    from: m.from,
+                    to: m.to,
+                    dieIndex: m.dieIndex,
+                  ),
+          );
+        }
+      }
+    }
+    return glowing;
   }
 
   /// Tells the tray which chip is selected.
@@ -717,6 +816,7 @@ class GameController extends ChangeNotifier {
     final after = Engine.apply(before, move);
     final start = _now();
     _autoMove = null;
+    _clearVariants();
     if (banked) {
       // The chip at the spent die's index flies to the token.
       tray.spendAt(

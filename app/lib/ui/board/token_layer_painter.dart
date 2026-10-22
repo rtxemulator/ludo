@@ -115,6 +115,7 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
 
+    _drawVariants(canvas, now);
     _drawGlows(canvas, now);
 
     final dimAmount = game.noMoveSeat == null
@@ -131,8 +132,9 @@ class TokenLayerPainter extends CustomPainter {
         var scale = game.restScales[seat][i];
         var layer = _Layer.resting;
         if (pose != null) {
-          final isMover =
-              plan != null && seat == plan.owner && i == plan.tokenIndex;
+          final isMover = plan != null &&
+              seat == plan.owner &&
+              (i == plan.tokenIndex || i == plan.partnerIndex);
           scale = isMover ? game.moverBaseScale : 1.0;
           layer = isMover ? _Layer.mover : _Layer.victim;
         }
@@ -192,6 +194,32 @@ class TokenLayerPainter extends CustomPainter {
   }
 
   /// Pocket glow of a token that just reached home (under the pawns).
+  /// Destination markers of a token that can move in more than one way: a
+  /// ring with one dot for the single token, two dots for the whole blockade.
+  void _drawVariants(Canvas canvas, double now) {
+    if (game.variants.isEmpty || game.phase != GamePhase.awaitingMove) {
+      return;
+    }
+    final pulse = PulseSample.at(now, game.spec);
+    for (var k = 0; k < game.variants.length; k++) {
+      final move = game.variants[k];
+      final p = game.variantPoints[k];
+      final center = Offset(p.x, p.y);
+      final color = palette.seatLight(move.owner);
+      _ring
+        ..strokeWidth = 0.09
+        ..color = color.withAlpha((pulse.opacity * 255).round().clamp(0, 255));
+      canvas.drawCircle(center, pulse.radius, _ring);
+      _spark.color = color;
+      if (move.isUnit) {
+        canvas.drawCircle(center.translate(-0.2, 0), 0.19, _spark);
+        canvas.drawCircle(center.translate(0.2, 0), 0.19, _spark);
+      } else {
+        canvas.drawCircle(center, 0.24, _spark);
+      }
+    }
+  }
+
   void _drawGlows(Canvas canvas, double now) {
     for (final g in game.fx.glows) {
       final strength = g.sample(now);

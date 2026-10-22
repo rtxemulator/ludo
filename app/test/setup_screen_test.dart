@@ -162,6 +162,101 @@ void main() {
     expect(played.preset, RulesPreset.custom);
   });
 
+  testWidgets('blockade options need Blockades; two need moving blockades',
+      (tester) async {
+    await tall(tester);
+    await tester.pumpWidget(
+      MaterialApp(home: SetupScreen(onPlay: (_, __) {})),
+    );
+    await tester.tap(find.byKey(const ValueKey('house-rules')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    bool enabled(String title) =>
+        tester
+            .widget<SwitchListTile>(find.byKey(ValueKey('rule-$title')))
+            .onChanged !=
+        null;
+    bool on(String title) => tester
+        .widget<SwitchListTile>(find.byKey(ValueKey('rule-$title')))
+        .value;
+
+    const options = [
+      'Safe squares stay open',
+      'No passing friendly blockades',
+      'Moving blockades',
+      'Capture blockades',
+      'Unbreakable blockades',
+      'Piece on blockade',
+    ];
+    // Classic: no blockades, so every option is disabled.
+    for (final title in options) {
+      expect(enabled(title), isFalse, reason: title);
+      expect(on(title), isFalse, reason: title);
+    }
+
+    await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
+    await tester.pump();
+    expect(enabled('Safe squares stay open'), isTrue);
+    expect(enabled('No passing friendly blockades'), isTrue);
+    expect(enabled('Moving blockades'), isTrue);
+    expect(enabled('Piece on blockade'), isTrue);
+    // Still waiting for moving blockades.
+    expect(enabled('Capture blockades'), isFalse);
+    expect(enabled('Unbreakable blockades'), isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('rule-Moving blockades')));
+    await tester.pump();
+    expect(enabled('Capture blockades'), isTrue);
+    expect(enabled('Unbreakable blockades'), isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('rule-Capture blockades')));
+    await tester.pump();
+    expect(on('Capture blockades'), isTrue);
+
+    // Switching moving blockades off takes its dependants with it.
+    await tester.tap(find.byKey(const ValueKey('rule-Moving blockades')));
+    await tester.pump();
+    expect(on('Capture blockades'), isFalse);
+    expect(enabled('Capture blockades'), isFalse);
+
+    // And so does switching blockades off.
+    await tester.tap(find.byKey(const ValueKey('rule-Piece on blockade')));
+    await tester.pump();
+    expect(on('Piece on blockade'), isTrue);
+    await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
+    await tester.pump();
+    expect(on('Piece on blockade'), isFalse);
+    expect(enabled('Piece on blockade'), isFalse);
+  });
+
+  testWidgets('blockade options reach the played setup', (tester) async {
+    final played = await playFrom(
+      tester,
+      edit: () async {
+        await tester.tap(find.byKey(const ValueKey('house-rules')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const ValueKey('rule-Blockades')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('rule-Moving blockades')));
+        await tester.pump();
+        await tester
+            .tap(find.byKey(const ValueKey('rule-Unbreakable blockades')));
+        await tester.pump();
+        await tester
+            .tap(find.byKey(const ValueKey('rule-Safe squares stay open')));
+        await tester.pump();
+      },
+    );
+    final rules = played!.rules;
+    expect(rules.blockadeMovementActive, isTrue);
+    expect(rules.blockadeUnbreakableActive, isTrue);
+    expect(rules.safeSquaresOpenActive, isTrue);
+    expect(rules.blockadeCaptureActive, isFalse);
+    expect(played.preset, RulesPreset.custom);
+  });
+
   testWidgets('every edit is reported through onChanged', (tester) async {
     await tall(tester);
     final seen = <MatchSetup>[];

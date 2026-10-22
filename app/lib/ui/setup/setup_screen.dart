@@ -282,6 +282,7 @@ class _SetupScreenState extends State<SetupScreen> {
               (r, v) => r.copyWith(exactRollToFinish: v)),
           _rule(
               'Blockades', rules.blockades, (r, v) => r.copyWith(blockades: v)),
+          ..._blockadeOptions(rules),
           _rule(
             'Play on for a full ranking',
             rules.endMode == EndMode.fullRanking,
@@ -300,17 +301,84 @@ class _SetupScreenState extends State<SetupScreen> {
     ];
   }
 
+  /// The optional blockade rules, indented under "Blockades". They are
+  /// disabled (and shown off) while what they need is off: everything needs
+  /// Blockades, capturing and unbreakable ones also Moving blockades.
+  List<Widget> _blockadeOptions(RulesConfig rules) {
+    final blockades = rules.blockades;
+    final moving = rules.blockadeMovementActive;
+    return [
+      _rule(
+        'Safe squares stay open',
+        rules.safeSquaresOpenActive,
+        (r, v) => r.copyWith(blockadeSafeSquares: v),
+        subtitle: 'A pair standing on a safe square blocks nobody.',
+        enabled: blockades,
+        indent: true,
+      ),
+      _rule(
+        'No passing friendly blockades',
+        rules.friendlyRestrictionActive,
+        (r, v) => r.copyWith(blockadeFriendlyRestriction: v),
+        subtitle: "Your own and your teammates' blockades block you too.",
+        enabled: blockades,
+        indent: true,
+      ),
+      _rule(
+        'Moving blockades',
+        moving,
+        (r, v) => r.copyWith(blockadeMovement: v),
+        subtitle: 'A pair moves as one on even rolls, each token half the '
+            'roll, and jumps over other blockades.',
+        enabled: blockades,
+        indent: true,
+      ),
+      _rule(
+        'Capture blockades',
+        rules.blockadeCaptureActive,
+        (r, v) => r.copyWith(blockadeCapture: v),
+        subtitle: 'A moving blockade landing on an opponent blockade '
+            'captures it. Needs moving blockades.',
+        enabled: moving,
+        indent: true,
+      ),
+      _rule(
+        'Unbreakable blockades',
+        rules.blockadeUnbreakableActive,
+        (r, v) => r.copyWith(blockadeUnbreakable: v),
+        subtitle: 'A pair cannot be split until it stands on a safe square. '
+            'Needs moving blockades.',
+        enabled: moving,
+        indent: true,
+      ),
+      _rule(
+        'Piece on blockade',
+        rules.pieceOnBlockadeActive,
+        (r, v) => r.copyWith(pieceOnBlockade: v),
+        subtitle: 'A single piece may land on an opponent blockade. It waits '
+            "a full turn, and a single token of the blockade's owner "
+            'landing there captures it.',
+        enabled: blockades,
+        indent: true,
+      ),
+    ];
+  }
+
   Widget _rule(
     String title,
     bool value,
-    RulesConfig Function(RulesConfig rules, bool value) apply,
-  ) {
+    RulesConfig Function(RulesConfig rules, bool value) apply, {
+    String? subtitle,
+    bool enabled = true,
+    bool indent = false,
+  }) {
     return SwitchListTile(
       key: ValueKey('rule-$title'),
-      contentPadding: EdgeInsets.zero,
+      contentPadding: EdgeInsets.only(left: indent ? 24 : 0),
       title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
       value: value,
-      onChanged: (v) => _rules((r) => apply(r, v)),
+      onChanged: enabled ? (v) => _rules((r) => apply(r, v)) : null,
     );
   }
 

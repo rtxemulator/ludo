@@ -215,7 +215,7 @@ Safe squares hold no blockades, so this is how pairs come to stand on ordinary s
 - with three or more tokens on the square, the two lowest-numbered go;
 - the destination must be an ordinary square (a pair that ends on a safe square would not be a blockade);
 - without moving blockades (9.3) the pair has to **walk**: it cannot jump over blockades, and the friendly restriction (9.2) applies as for single tokens; with moving blockades it jumps like a moving blockade;
-- like every unit move it cannot capture a single piece, so it cannot land on one on an ordinary square, nor on an opponent blockade (unless 9.4 allows it);
+- like every unit move it **never captures a single piece**: it may land on a square holding one and simply shares the square; it may not land on an opponent blockade (unless 9.4 allows it);
 - engine: a `Move` with `partnerIndex >= 0`, same as a unit move; in the UI a tap on a pair that has both options offers "this token" or "both tokens" markers.
 
 ### 9.2 Friendly blockade restriction (`blockadeFriendlyRestriction`)
@@ -229,7 +229,7 @@ A **pair** may also move **as a unit**:
 - only on an **even** roll `d`; each of the two tokens advances `d / 2` squares (2 -> 1, 4 -> 2, 6 -> 3), with the usual end-of-track rules (a pair may enter the home column; it stops being a blockade there; it cannot finish in one move);
 - it **jumps over** every blockade on the way (opponent, friendly, restricted);
 - it **may not land** on a blockade of its own, on a teammate's blockade (unless the square is safe), or on an opponent blockade (unless 9.4 allows it);
-- it **never captures a single piece**, so it cannot land on a single opponent token on an ordinary square (on a safe square it may share with one; a capture of a blockade is 9.3);
+- it **never captures a single piece**: it may land on a square holding a lone opponent token and shares the square with it (no capture, no bonus turn; a single token of yours landing there later would capture it as usual); only blockades can be captured, and only by 9.4;
 - exactly two tokens: three or more on a square do not move as a unit; a waiting token (9.6) cannot be part of one; a pair on a safe square is no blockade and cannot move as one (but may step out, 9.1);
 - the single-token moves stay legal (the pair may be split) unless 9.5 forbids it.
 

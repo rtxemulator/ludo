@@ -423,16 +423,8 @@ abstract final class Engine {
       return true; // home column and finish hold no blockades
     }
     final square = absoluteSquare(owner, to);
-    if (!isSafeSquare(square)) {
-      // A moving blockade never captures a single piece, so it cannot land
-      // on one.
-      for (final seat in state.activeSeats) {
-        if (state.unitOf(seat) != state.unitOf(owner) &&
-            _countAt(state, seat, square) == 1) {
-          return false;
-        }
-      }
-    }
+    // A single opponent piece on the square does not stop a moving blockade:
+    // it may land there, but never captures it (see `_effects`).
     final holders = blockades[square];
     if (holders == null) {
       return true;
@@ -782,7 +774,7 @@ abstract final class Engine {
             continue;
           }
           // A moving blockade only ever captures blockades, never a single
-          // piece (such a landing is not legal in the first place).
+          // piece: it lands next to it and leaves it be.
           if (chosen.isUnit && _countAt(state, seat, square) < 2) {
             continue;
           }

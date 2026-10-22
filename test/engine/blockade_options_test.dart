@@ -321,15 +321,20 @@ void main() {
       expect(units(pairAt(8), 4), hasLength(1)); // forming a blockade
     });
 
-    test('it never captures a single piece, so it cannot land on one', () {
+    test('it may land on a single piece but never captures it', () {
       final state = pairAt(
         10,
         more: {
           2: [relativeFor(2, 12), -1, -1, -1],
         },
-      );
-      expect(units(state, 4), isEmpty);
-      // The single token could capture it, as always.
+      ).copyWith(dice: 4);
+      final move = unitMove(state);
+      expect(move.to, 12);
+      final after = Engine.apply(state, move);
+      expect(after.tokens[0].take(2), [12, 12]);
+      expect(after.tokens[2][0], relativeFor(2, 12)); // still there
+      expect(after.currentSeat, isNot(0)); // no capture, so no bonus turn
+      // A single token landing there would capture it, as always.
       expect(singles(state, 2), hasLength(2));
     });
 
@@ -475,11 +480,14 @@ void main() {
       expect(units(pairAt(0, r: moving, more: ahead), 4), hasLength(1));
     });
 
-    test('it cannot land on a single piece (no capture)', () {
+    test('it may land on a single piece, without capturing it', () {
       final single = {
         1: [relativeFor(1, 2), -1, -1, -1],
       };
-      expect(units(pairAt(0, more: single), 4), isEmpty);
+      final state = pairAt(0, more: single).copyWith(dice: 4);
+      final after = Engine.apply(state, unitMove(state));
+      expect(after.tokens[0].take(2), [2, 2]);
+      expect(after.tokens[1][0], relativeFor(1, 2));
     });
 
     test('the friendly restriction applies to walking pairs', () {

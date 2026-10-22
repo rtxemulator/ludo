@@ -112,8 +112,9 @@ class RulesConfig {
   final bool blockadeMovement;
 
   /// A moving blockade that lands on an opponent blockade (on a non-safe
-  /// square) captures it. (A moving blockade never captures a single piece
-  /// and cannot land on one.) Needs [blockadeMovement].
+  /// square) captures it. (A moving blockade never captures a single piece;
+  /// it may land on one and shares the square with it.) Needs
+  /// [blockadeMovement].
   final bool blockadeCapture;
 
   /// A two-piece blockade on a non-safe square cannot be split: its tokens

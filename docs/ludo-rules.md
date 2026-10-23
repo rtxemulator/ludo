@@ -229,7 +229,7 @@ A **pair** may also move **as a unit**:
 - only on an **even** roll `d`; each of the two tokens advances `d / 2` squares (2 -> 1, 4 -> 2, 6 -> 3), with the usual end-of-track rules (a pair may enter the home column; it stops being a blockade there; it cannot finish in one move);
 - it **jumps over** every blockade on the way (opponent, friendly, restricted);
 - it **may not land** on a blockade of its own, on a teammate's blockade (unless the square is safe), or on an opponent blockade (unless 9.4 allows it);
-- it **never captures a single piece**: it may land on a square holding a lone opponent token and shares the square with it (no capture, no bonus turn; a single token of yours landing there later would capture it as usual); only blockades can be captured, and only by 9.4;
+- it **never captures a single piece**: it may land on a square holding a lone opponent token and shares the square with it (no capture, no bonus turn; a single token of yours landing there later would capture it as usual). If the pair splits later, the two lone tokens keep sharing the square until someone lands there (a landing captures every opponent token on the square, as usual); only blockades can be captured, and only by 9.4;
 - exactly two tokens: three or more on a square do not move as a unit; a waiting token (9.6) cannot be part of one; a pair on a safe square is no blockade and cannot move as one (but may step out, 9.1);
 - the single-token moves stay legal (the pair may be split) unless 9.5 forbids it.
 

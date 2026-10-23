@@ -16,10 +16,16 @@ Future<void> showTableMenu(
   required GameController game,
   required GameSettings settings,
   required TableLayout layout,
+  VoidCallback? onSetup,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => TableMenu(game: game, settings: settings, layout: layout),
+    builder: (_) => TableMenu(
+      game: game,
+      settings: settings,
+      layout: layout,
+      onSetup: onSetup,
+    ),
   );
 }
 
@@ -30,11 +36,15 @@ class TableMenu extends StatefulWidget {
     required this.game,
     required this.settings,
     required this.layout,
+    this.onSetup,
   });
 
   final GameController game;
   final GameSettings settings;
   final TableLayout layout;
+
+  /// "Players & rules": back to the setup screen. `null` hides the entry.
+  final VoidCallback? onSetup;
 
   @override
   State<TableMenu> createState() => _TableMenuState();
@@ -101,6 +111,15 @@ class _TableMenuState extends State<TableMenu> {
             _game.newGame();
           },
         ),
+        if (widget.onSetup != null)
+          ListTile(
+            leading: const Icon(Icons.groups),
+            title: const Text('Players & rules'),
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.onSetup!();
+            },
+          ),
         ListTile(
           leading: const Icon(Icons.settings),
           title: const Text('Settings'),

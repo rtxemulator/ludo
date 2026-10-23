@@ -28,12 +28,16 @@ class TableView extends StatelessWidget {
     required this.settings,
     required this.palette,
     required this.shaders,
+    this.onSetup,
   });
 
   final GameController game;
   final GameSettings settings;
   final LudoPalette palette;
   final TokenShaders shaders;
+
+  /// Opens the new-game setup; `null` hides the menu entry.
+  final VoidCallback? onSetup;
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +125,7 @@ class TableView extends StatelessWidget {
                           game: game,
                           settings: settings,
                           layout: layout,
+                          onSetup: onSetup,
                         ),
                       ),
                     ),
@@ -134,6 +139,7 @@ class TableView extends StatelessWidget {
                       game: game,
                       settings: settings,
                       layout: layout,
+                      onSetup: onSetup,
                     ),
                   ),
                   if (settings.frameOverlay)

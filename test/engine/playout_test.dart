@@ -63,7 +63,15 @@ void _checkInvariants(GameState state, String context) {
     }
   }
 
-  // Opposing units never share a non-safe track square.
+  // Opposing units never share a non-safe track square, except through the
+  // blockade rules that allow it: a moving blockade (or a pair stepping out
+  // of a safe square) may land on a lone piece without capturing it, and a
+  // single piece may squat on an opponent blockade. If the pair later splits,
+  // the two lone tokens keep sharing the square until someone lands there.
+  final sharingAllowed = state.rules.blockades &&
+      (state.rules.formFromSafeActive ||
+          state.rules.blockadeMovementActive ||
+          state.rules.pieceOnBlockadeActive);
   final unitsOnSquare = <int, Set<int>>{};
   for (final seat in state.activeSeats) {
     for (final p in state.tokens[seat]) {
@@ -75,7 +83,7 @@ void _checkInvariants(GameState state, String context) {
     }
   }
   unitsOnSquare.forEach((square, units) {
-    if (units.length > 1 && !isSafeSquare(square)) {
+    if (units.length > 1 && !isSafeSquare(square) && !sharingAllowed) {
       fail('opponents share non-safe square $square');
     }
   });

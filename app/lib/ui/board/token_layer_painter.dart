@@ -94,6 +94,8 @@ class TokenLayerPainter extends CustomPainter {
     final revert = game.revert;
     final revertT = now - game.revertStartMs;
 
+    _drawBlockades(canvas, now, state);
+
     // Legal-move glow sits under everything.
     if (game.phase == GamePhase.awaitingMove) {
       final pulse = PulseSample.at(now, game.spec);
@@ -115,6 +117,7 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
 
+    _drawVariants(canvas, now);
     _drawGlows(canvas, now);
 
     final dimAmount = game.noMoveSeat == null
@@ -131,8 +134,9 @@ class TokenLayerPainter extends CustomPainter {
         var scale = game.restScales[seat][i];
         var layer = _Layer.resting;
         if (pose != null) {
-          final isMover =
-              plan != null && seat == plan.owner && i == plan.tokenIndex;
+          final isMover = plan != null &&
+              seat == plan.owner &&
+              (i == plan.tokenIndex || i == plan.partnerIndex);
           scale = isMover ? game.moverBaseScale : 1.0;
           layer = isMover ? _Layer.mover : _Layer.victim;
         }
@@ -192,6 +196,69 @@ class TokenLayerPainter extends CustomPainter {
   }
 
   /// Pocket glow of a token that just reached home (under the pawns).
+  static const BoardGeometry _geo = BoardGeometry();
+  final Paint _wallFill = Paint();
+  final Paint _wallEdge = Paint()..style = PaintingStyle.stroke;
+
+  /// Every blockade on the board is marked on its square: a tinted, outlined
+  /// tile in the owner's colour with a thin bright inner frame that breathes
+  /// slowly, so a wall reads at a glance and tokens of one player are
+  /// clearly a unit.
+  void _drawBlockades(Canvas canvas, double now, GameState state) {
+    final blockades = Engine.blockades(state);
+    if (blockades.isEmpty) {
+      return;
+    }
+    final breath = game.spec.reducedMotion
+        ? 0.5
+        : 0.5 + 0.5 * math.sin(now / 520 * math.pi);
+    for (final b in blockades) {
+      final c = _geo.trackCell(b.square);
+      final color = palette.seatLight(b.seat);
+      final outer = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(c.x, c.y), width: 0.96, height: 0.96),
+        const Radius.circular(0.2),
+      );
+      _wallFill.color = palette.seat[b.seat].withAlpha(70);
+      canvas.drawRRect(outer, _wallFill);
+      _wallEdge
+        ..strokeWidth = 0.11
+        ..color = color.withAlpha(215);
+      canvas.drawRRect(outer, _wallEdge);
+      _wallEdge
+        ..strokeWidth = 0.035
+        ..color = const Color(0xFFFFFFFF)
+            .withAlpha((70 + 110 * breath).round().clamp(0, 255));
+      canvas.drawRRect(outer.deflate(0.17), _wallEdge);
+    }
+  }
+
+  /// Destination markers of a token that can move in more than one way: a
+  /// ring with one dot for the single token, two dots for the whole blockade.
+  void _drawVariants(Canvas canvas, double now) {
+    if (game.variants.isEmpty || game.phase != GamePhase.awaitingMove) {
+      return;
+    }
+    final pulse = PulseSample.at(now, game.spec);
+    for (var k = 0; k < game.variants.length; k++) {
+      final move = game.variants[k];
+      final p = game.variantPoints[k];
+      final center = Offset(p.x, p.y);
+      final color = palette.seatLight(move.owner);
+      _ring
+        ..strokeWidth = 0.09
+        ..color = color.withAlpha((pulse.opacity * 255).round().clamp(0, 255));
+      canvas.drawCircle(center, pulse.radius, _ring);
+      _spark.color = color;
+      if (move.isUnit) {
+        canvas.drawCircle(center.translate(-0.2, 0), 0.19, _spark);
+        canvas.drawCircle(center.translate(0.2, 0), 0.19, _spark);
+      } else {
+        canvas.drawCircle(center, 0.24, _spark);
+      }
+    }
+  }
+
   void _drawGlows(Canvas canvas, double now) {
     for (final g in game.fx.glows) {
       final strength = g.sample(now);
@@ -230,6 +297,9 @@ class TokenLayerPainter extends CustomPainter {
         case FxKind.shockwave:
           color = palette.seatLight(r.seat);
           width = 0.12;
+        case FxKind.wall:
+          color = palette.seatLight(r.seat);
+          width = 0.16;
         case FxKind.yardExit:
         case FxKind.ripple:
           color = palette.seatLight(r.seat);

@@ -33,7 +33,10 @@ class MoveAnimationPlan {
   const MoveAnimationPlan._({
     required this.owner,
     required this.tokenIndex,
+    required this.partnerIndex,
+    required this.formed,
     required this.mover,
+    required this.partner,
     required this.victims,
     required this.ring,
     required this.effects,
@@ -68,12 +71,31 @@ class MoveAnimationPlan {
       path.add(restAfter[owner][index]);
     }
     final reachedHome = to == finishPosition;
+    final formed = isOnTrack(to) &&
+        _holdsBlockade(after, owner, to) &&
+        !_holdsBlockade(before, owner, to);
     final mover = TokenTimeline.hop(
       path: path,
       fromYard: from == yardPosition,
       toFinish: reachedHome,
       spec: spec,
     );
+    // A moving blockade carries its partner along the same way.
+    TokenTimeline? partner;
+    if (move.isUnit) {
+      final other = move.partnerIndex;
+      final partnerPath = <Pt>[restBefore[owner][other]];
+      for (var p = from + 1; p < to; p++) {
+        partnerPath.add(geometry.cellCenter(owner, p, other));
+      }
+      partnerPath.add(restAfter[owner][other]);
+      partner = TokenTimeline.hop(
+        path: partnerPath,
+        fromYard: false,
+        toFinish: false,
+        spec: spec,
+      );
+    }
 
     final victims = <VictimAnimation>[];
     for (var seat = 0; seat < seatCount; seat++) {
@@ -119,6 +141,7 @@ class MoveAnimationPlan {
       restAfter: restAfter,
       fromYard: from == yardPosition,
       reachedHome: reachedHome,
+      formed: formed,
     );
 
     var total = mover.durationMs;
@@ -134,7 +157,10 @@ class MoveAnimationPlan {
     return MoveAnimationPlan._(
       owner: owner,
       tokenIndex: index,
+      partnerIndex: move.partnerIndex,
+      formed: formed,
       mover: mover,
+      partner: partner,
       victims: victims,
       ring: ring,
       effects: effects,
@@ -144,7 +170,16 @@ class MoveAnimationPlan {
 
   final int owner;
   final int tokenIndex;
+
+  /// The second token of a moving blockade, or `-1`.
+  final int partnerIndex;
+
+  /// Whether this move formed a blockade (a new pair on an ordinary square).
+  final bool formed;
   final TokenTimeline mover;
+
+  /// The timeline of the partner token (moving blockades only).
+  final TokenTimeline? partner;
   final List<VictimAnimation> victims;
 
   /// Present only when the move finished a token.
@@ -162,6 +197,9 @@ class MoveAnimationPlan {
   TokenPose? poseOf(int seat, int index, double tMs) {
     if (seat == owner && index == tokenIndex) {
       return mover.sample(tMs);
+    }
+    if (seat == owner && index == partnerIndex && partner != null) {
+      return partner!.sample(tMs);
     }
     for (final v in victims) {
       if (v.seat == seat && v.tokenIndex == index) {
@@ -184,6 +222,7 @@ PlanEffects _effects({
   required List<List<Pt>> restAfter,
   required bool fromYard,
   required bool reachedHome,
+  required bool formed,
 }) {
   final owner = move.owner;
   final index = move.tokenIndex;
@@ -266,5 +305,40 @@ PlanEffects _effects({
       ),
     );
   }
+  if (formed) {
+    // A blockade went up: two rings and a glow in the owner's colour from the
+    // square itself.
+    final wall = geometry.trackCell(absoluteSquare(owner, move.to));
+    for (final delay in const [0.0, 110.0]) {
+      rings.add(
+        FxRing(
+          ring: RingFx.wall(center: wall, startMs: impact + delay, spec: spec),
+          seat: owner,
+          kind: FxKind.wall,
+        ),
+      );
+    }
+    glows.add(FxGlow(center: wall, seat: owner, startMs: impact, spec: spec));
+  }
+  if (move.isUnit) {
+    rings.add(
+      FxRing(
+        ring: RingFx.dust(
+          center: restAfter[owner][move.partnerIndex],
+          startMs: impact,
+          spec: spec,
+        ),
+        seat: owner,
+        kind: FxKind.dust,
+      ),
+    );
+  }
   return PlanEffects(rings: rings, sparks: sparks, glows: glows);
+}
+
+/// Whether [seat] holds a blockade on its relative track position [position].
+bool _holdsBlockade(GameState state, int seat, int position) {
+  final square = absoluteSquare(seat, position);
+  return Engine.blockades(state)
+      .any((b) => b.seat == seat && b.square == square);
 }

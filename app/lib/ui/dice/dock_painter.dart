@@ -64,8 +64,9 @@ class DockPainter extends CustomPainter {
     final now = game.clock.value;
     final active = game.activeSeat;
     // The seat on turn is drawn last so a tumbling die is on top.
+    // Empty seats (2 and 3 player tables) have no dock.
     for (var seat = 0; seat < 4; seat++) {
-      if (seat != active) {
+      if (seat != active && game.state.isActive(seat)) {
         _paintDock(canvas, seat, now, active);
       }
     }

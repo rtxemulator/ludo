@@ -27,6 +27,13 @@ jobs:
             exit 1
           fi
 
+      - name: Seats purity (no Flutter imports)
+        run: |
+          if grep -rn "package:flutter" lib/seats/; then
+            echo "::error::lib/seats/ must never import Flutter"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: dart pub get
 
@@ -79,7 +86,7 @@ jobs:
           ls -l build/app/outputs/flutter-apk/*.apk
           echo "APK: $(du -h build/app/outputs/flutter-apk/app-release.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ludo-arm64-release
           path: app/build/app/outputs/flutter-apk/app-release.apk
@@ -95,7 +102,7 @@ jobs:
           ls -l build/app/outputs/flutter-apk/app-profile.apk
           echo "Profile APK: $(du -h build/app/outputs/flutter-apk/app-profile.apk | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ludo-arm64-profile
           path: app/build/app/outputs/flutter-apk/app-profile.apk

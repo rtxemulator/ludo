@@ -8,7 +8,7 @@ import 'motion_spec.dart';
 import 'pt.dart';
 
 /// What a ring means (the painter picks a colour and a stroke from it).
-enum FxKind { dust, shockwave, yardExit, ripple, nudge }
+enum FxKind { dust, shockwave, yardExit, ripple, nudge, wall }
 
 /// A ring effect and the seat whose colour it wears.
 class FxRing {

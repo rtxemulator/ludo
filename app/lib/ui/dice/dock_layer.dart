@@ -72,20 +72,21 @@ class DockLayer extends StatelessWidget {
           ),
         ),
         for (final dock in layout.docks)
-          Positioned(
-            left: dock.rect.left,
-            top: dock.rect.top,
-            width: dock.rect.width,
-            height: dock.rect.height,
-            child: IgnorePointer(
-              ignoring: yardsBusy,
-              child: GestureDetector(
-                key: ValueKey<String>('dock-${dock.seat}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => game.dockTap(dock.seat),
+          if (game.state.isActive(dock.seat))
+            Positioned(
+              left: dock.rect.left,
+              top: dock.rect.top,
+              width: dock.rect.width,
+              height: dock.rect.height,
+              child: IgnorePointer(
+                ignoring: yardsBusy,
+                child: GestureDetector(
+                  key: ValueKey<String>('dock-${dock.seat}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => game.dockTap(dock.seat),
+                ),
               ),
             ),
-          ),
         for (final dock in layout.docks)
           if (game.trayTappable(dock.seat))
             Positioned(

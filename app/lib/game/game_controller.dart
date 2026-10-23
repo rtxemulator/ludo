@@ -11,6 +11,7 @@ import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/seats/seats.dart';
 import 'package:ludo/ui/core/revert_plan.dart';
 
 import '../haptics/haptics_service.dart';
@@ -27,19 +28,22 @@ class DockToast {
   final double startMs;
 }
 
-/// Hot-seat game flow on top of the engine.
+/// Game flow on top of the engine, for the seats of a [MatchSetup].
 ///
 /// The engine owns all rules and state; this class only sequences
 /// `roll -> choose -> apply` and exposes timing for the painters. The UI
-/// never mutates [state] directly.
+/// never mutates [state] directly. Human seats act through taps; AI seats
+/// are driven from [tick] with a short think time so their rolls and moves
+/// stay readable.
 class GameController extends ChangeNotifier {
   GameController({
     RulesConfig rules = const RulesConfig(),
+    MatchSetup? setup,
     int? seed,
     double Function()? now,
     bool haptics = true,
     HapticsService? hapticsService,
-  })  : _rules = rules,
+  })  : _setup = setup ?? MatchSetup.hotSeat(rules: rules),
         _now = now ?? _stopwatchClock(),
         feedback = hapticsService ?? HapticsService() {
     feedback.enabled = haptics;
@@ -53,24 +57,46 @@ class GameController extends ChangeNotifier {
 
   static const BoardGeometry _geo = BoardGeometry();
 
-  RulesConfig _rules;
+  MatchSetup _setup;
   final double Function() _now;
+  static const GreedyBot _bot = GreedyBot();
+
+  /// Who sits where and who controls each seat.
+  MatchSetup get setup => _setup;
 
   /// The rules of the running match.
-  RulesConfig get rules => _rules;
+  RulesConfig get rules => _setup.rules;
 
   /// Whether banked ("stacking") dice rolls are on. Everything banked-only
   /// (roll tray, selection, revert) is inert when this is `false`.
-  bool get banked => _rules.bankedRolls;
+  bool get banked => _setup.rules.bankedRolls;
 
   /// Switches banked rolls on or off; a change starts a new game.
   void setBankedRolls(bool on) {
-    if (_rules.bankedRolls == on) {
+    if (_setup.rules.bankedRolls == on) {
       return;
     }
-    _rules = _rules.copyWith(bankedRolls: on);
+    _setup = _setup.withRules(_setup.baseRules.copyWith(bankedRolls: on));
     newGame();
   }
+
+  /// Whether [seat] is played by the computer.
+  bool isAi(int seat) => _setup.typeOf(seat) == SeatType.ai;
+
+  /// Whether the computer is the one to roll or choose now.
+  bool get aiTurn =>
+      (phase == GamePhase.awaitingRoll || phase == GamePhase.awaitingMove) &&
+      isAi(state.currentSeat);
+
+  /// Think time before an AI seat rolls, and before it picks a move (ms).
+  static const double aiRollDelayMs = 700;
+  static const double aiMoveDelayMs = 650;
+
+  /// Reduced motion shortens the think time.
+  static const double aiReducedDelayMs = 250;
+
+  /// When the AI acts next (frame-clock ms); `null` while nothing is due.
+  double? _aiDueMs;
 
   /// Haptic feedback (native channel); `feedback.enabled` is the global
   /// toggle.
@@ -195,7 +221,9 @@ class GameController extends ChangeNotifier {
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
-    state = Engine.newGame(seed: s, rules: _rules);
+    state = _setup.newGame(s);
+    _aiDueMs = null;
+    _clearVariants();
     phase = GamePhase.awaitingRoll;
     legal = const [];
     lastRoll = null;
@@ -223,6 +251,29 @@ class GameController extends ChangeNotifier {
     prevActiveSeat = null;
     activeSinceMs = -1e9;
     _refreshLayout();
+    notifyListeners();
+  }
+
+  /// Test hook: puts the table in [loaded] (a state with a pending die or,
+  /// with banked rolls, in the moving phase) as if it had been rolled.
+  @visibleForTesting
+  void debugLoad(GameState loaded) {
+    state = loaded;
+    diceSeat = loaded.currentSeat;
+    rollerSeat = diceSeat;
+    _clearVariants();
+    _refreshLayout();
+    if (loaded.awaitingMove) {
+      if (banked) {
+        _enterMoving();
+      } else {
+        legal = Engine.legalMoves(loaded);
+        phase = GamePhase.awaitingMove;
+      }
+    } else {
+      legal = const [];
+      phase = GamePhase.awaitingRoll;
+    }
     notifyListeners();
   }
 
@@ -274,14 +325,19 @@ class GameController extends ChangeNotifier {
   void dockTap(int seat) {
     if (seat == activeSeat) {
       if (phase == GamePhase.awaitingRoll) {
-        roll();
+        if (aiTurn) {
+          // The computer rolls by itself.
+          pulseDock(seat);
+        } else {
+          roll();
+        }
         return;
       }
       if (phase == GamePhase.rolling) {
         quickRoll();
         return;
       }
-      if (banked && phase == GamePhase.awaitingMove) {
+      if (banked && phase == GamePhase.awaitingMove && !aiTurn) {
         // The live die is the roll button, but the bank has to be spent
         // first: it shakes, and so does the tray.
         final now = _now();
@@ -316,6 +372,9 @@ class GameController extends ChangeNotifier {
   /// while a token is to be chosen, a tap on a token that cannot move nudges
   /// it (with a faint red ring and a double tick).
   bool tapAt(Pt grid) {
+    if (aiTurn) {
+      return false;
+    }
     if (phase == GamePhase.awaitingRoll) {
       pulseDock(diceSeat);
       return false;
@@ -323,24 +382,89 @@ class GameController extends ChangeNotifier {
     if (phase != GamePhase.awaitingMove) {
       return false;
     }
+    if (variants.isNotEmpty) {
+      final picked = _pickVariant(grid);
+      _clearVariants();
+      if (picked != null) {
+        _startMove(picked);
+        return true;
+      }
+      notifyListeners();
+    }
     if (banked) {
       return _tapBanked(grid);
     }
-    Move? best;
-    var bestDistance = 0.8;
-    for (final move in legal) {
-      final d = resting[move.owner][move.tokenIndex].distanceTo(grid);
-      if (d <= bestDistance) {
-        bestDistance = d;
-        best = move;
-      }
-    }
-    if (best == null) {
+    final token = _nearestToken(legal, grid);
+    if (token == null) {
       _illegalTap(grid);
       return false;
     }
-    _startMove(best);
-    return true;
+    final mine = [
+      for (final m in legal)
+        if (m.owner == token.$1 && m.moves(token.$2)) m,
+    ];
+    if (mine.length == 1) {
+      _startMove(mine.single);
+      return true;
+    }
+    _promptVariants(mine);
+    return false;
+  }
+
+  /// The token (owner, index) of [moves] nearest to [grid], within reach of a
+  /// tap; both tokens of a moving blockade count.
+  (int, int)? _nearestToken(Iterable<Move> moves, Pt grid) {
+    (int, int)? best;
+    var bestDistance = 0.8;
+    for (final move in moves) {
+      for (final index in [
+        move.tokenIndex,
+        if (move.isUnit) move.partnerIndex,
+      ]) {
+        final d = resting[move.owner][index].distanceTo(grid);
+        if (d <= bestDistance) {
+          bestDistance = d;
+          best = (move.owner, index);
+        }
+      }
+    }
+    return best;
+  }
+
+  /// Moves a tapped token (or blockade) could make: when it is more than
+  /// one, the destinations are shown as markers and the next tap on one of
+  /// them chooses. Empty when no choice is pending.
+  List<Move> variants = const [];
+
+  /// Where each of [variants] ends (board grid points, same order).
+  List<Pt> variantPoints = const [];
+
+  void _promptVariants(List<Move> moves) {
+    variants = moves;
+    variantPoints = [
+      for (final m in moves)
+        _geo.restingPoints(Engine.apply(state, m))[m.owner][m.tokenIndex],
+    ];
+    feedback.play(HapticEvent.select);
+    notifyListeners();
+  }
+
+  void _clearVariants() {
+    variants = const [];
+    variantPoints = const [];
+  }
+
+  Move? _pickVariant(Pt grid) {
+    Move? best;
+    var bestDistance = 0.9;
+    for (var k = 0; k < variants.length; k++) {
+      final d = variantPoints[k].distanceTo(grid);
+      if (d <= bestDistance) {
+        bestDistance = d;
+        best = variants[k];
+      }
+    }
+    return best;
   }
 
   /// Banked rolls: a tap on the board while dice are to be spent. A token
@@ -351,21 +475,16 @@ class GameController extends ChangeNotifier {
     if (c == null) {
       return false;
     }
-    Move? best;
-    var bestDistance = 0.8;
-    for (final move in c.legal) {
-      final d = resting[move.owner][move.tokenIndex].distanceTo(grid);
-      if (d <= bestDistance) {
-        bestDistance = d;
-        best = move;
-      }
-    }
-    if (best == null) {
+    final token = _nearestToken(c.legal, grid);
+    if (token == null) {
       _illegalTap(grid);
       return false;
     }
-    final result = c.tapToken(best.owner, best.tokenIndex);
+    final result = c.tapToken(token.$1, token.$2);
     switch (result.kind) {
+      case TokenTapKind.variants:
+        _promptVariants(result.moves!);
+        return false;
       case TokenTapKind.spend:
         _startMove(result.move!);
         return true;
@@ -391,10 +510,12 @@ class GameController extends ChangeNotifier {
     if (!banked ||
         phase != GamePhase.awaitingMove ||
         c == null ||
+        aiTurn ||
         seat != state.currentSeat) {
       return;
     }
     if (c.tapChip(chip)) {
+      _clearVariants();
       _syncSelection();
       feedback.play(HapticEvent.select);
       notifyListeners();
@@ -409,19 +530,37 @@ class GameController extends ChangeNotifier {
       banked &&
       phase == GamePhase.awaitingMove &&
       choice != null &&
+      !aiTurn &&
       seat == state.currentSeat;
 
   /// Tokens whose glow is drawn: the moves of the selected chip (every legal
   /// move while none is selected), one entry per token.
   List<Move> get glowMoves {
-    if (!banked) {
-      return legal;
+    final source = banked ? choice?.glowMoves ?? const <Move>[] : legal;
+    if (!banked && !source.any((m) => m.isUnit)) {
+      return legal; // the common case: nothing to expand
     }
     final seen = <int>{};
-    return [
-      for (final m in choice?.glowMoves ?? const <Move>[])
-        if (seen.add(m.owner * tokensPerSeat + m.tokenIndex)) m,
-    ];
+    final glowing = <Move>[];
+    for (final m in source) {
+      // Both tokens of a moving blockade glow.
+      for (final index in [m.tokenIndex, if (m.isUnit) m.partnerIndex]) {
+        if (seen.add(m.owner * tokensPerSeat + index)) {
+          glowing.add(
+            index == m.tokenIndex
+                ? m
+                : Move(
+                    owner: m.owner,
+                    tokenIndex: index,
+                    from: m.from,
+                    to: m.to,
+                    dieIndex: m.dieIndex,
+                  ),
+          );
+        }
+      }
+    }
+    return glowing;
   }
 
   /// Tells the tray which chip is selected.
@@ -502,7 +641,9 @@ class GameController extends ChangeNotifier {
               ? HapticEvent.capture
               : plan!.ring != null
                   ? HapticEvent.home
-                  : HapticEvent.tokenLand,
+                  : plan!.formed
+                      ? HapticEvent.select
+                      : HapticEvent.tokenLand,
         );
       }
       if (t >= plan!.totalMs) {
@@ -514,6 +655,34 @@ class GameController extends ChangeNotifier {
       // The confetti is over: let the screen stop the ticker.
       _tickerStopNotified = true;
       notifyListeners();
+    }
+    _driveAi(now);
+  }
+
+  /// Lets an AI seat roll and choose: after a short think time it presses the
+  /// same buttons a person would, so the animations, haptics and rules flow
+  /// are identical for both.
+  void _driveAi(double now) {
+    if (!aiTurn) {
+      _aiDueMs = null;
+      return;
+    }
+    if (phase == GamePhase.awaitingMove && _autoMove != null) {
+      // A forced spend of the bank goes by itself.
+      return;
+    }
+    final slow =
+        phase == GamePhase.awaitingRoll ? aiRollDelayMs : aiMoveDelayMs;
+    final due =
+        _aiDueMs ??= now + (spec.reducedMotion ? aiReducedDelayMs : slow);
+    if (now < due) {
+      return;
+    }
+    _aiDueMs = null;
+    if (phase == GamePhase.awaitingRoll) {
+      roll();
+    } else if (legal.isNotEmpty) {
+      _startMove(_bot.choose(state, legal));
     }
   }
 
@@ -652,6 +821,7 @@ class GameController extends ChangeNotifier {
     final after = Engine.apply(before, move);
     final start = _now();
     _autoMove = null;
+    _clearVariants();
     if (banked) {
       // The chip at the spent die's index flies to the token.
       tray.spendAt(

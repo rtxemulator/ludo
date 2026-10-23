@@ -14,7 +14,7 @@ import 'wood_frame.dart';
 /// yard breathes an inner glow (period 2 s); the other yards are washed out
 /// a little. When the turn passes, the light fades out of one yard and into
 /// the next over the dock handoff time, so it visibly travels. No text needed
-/// to see whose turn it is.
+/// to see whose turn it is. Yards of empty seats are veiled.
 class YardGlowPainter extends CustomPainter {
   YardGlowPainter({
     required this.game,
@@ -47,6 +47,13 @@ class YardGlowPainter extends CustomPainter {
     final active = game.activeSeat;
     final breath = 0.5 - 0.5 * math.cos(2 * math.pi * now / periodMs);
     for (var s = 0; s < 4; s++) {
+      if (!game.state.isActive(s)) {
+        // An empty seat (2 and 3 player tables): the yard is mostly washed
+        // out and nothing breathes there.
+        _paint.color = palette.board.withAlpha(170);
+        canvas.drawRect(TokenShaders.yardRect(s), _paint);
+        continue;
+      }
       // 1 = fully lit, 0 = washed out; the handoff fades between them.
       final live = active == null
           ? 0.0

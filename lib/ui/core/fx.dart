@@ -57,6 +57,22 @@ class RingFx {
         visible: !spec.reducedMotion,
       );
 
+  /// Ring thrown out by a square when a blockade forms on it.
+  factory RingFx.wall({
+    required Pt center,
+    required double startMs,
+    MotionSpec spec = MotionSpec.standard,
+  }) =>
+      RingFx(
+        center: center,
+        startMs: startMs,
+        durationMs: spec.shockwaveMs * 1.6,
+        startRadius: 0.55,
+        endRadius: 1.5,
+        startOpacity: spec.shockwaveOpacity,
+        visible: !spec.reducedMotion,
+      );
+
   /// Ring that contracts onto the yard spot while a token leaves the yard.
   factory RingFx.yardExit({
     required Pt center,

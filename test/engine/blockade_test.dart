@@ -72,11 +72,29 @@ void main() {
       expect(after.tokens[1][0], yardPosition);
     });
 
-    test('on a safe square are fully respected', () {
+    test('on a safe square block nobody (safe squares stay open)', () {
       final landing = opponentBlockade(8).copyWith(dice: 3);
-      expect(canMove(landing, 0), isFalse);
+      expect(canMove(landing, 0), isTrue);
       final passing = opponentBlockade(8).copyWith(dice: 4);
-      expect(canMove(passing, 0), isFalse);
+      expect(canMove(passing, 0), isTrue);
+      // Sharing the safe square captures nobody.
+      final after = play(landing, 0);
+      expect(after.tokens[1].take(2), everyElement(relativeFor(1, 8)));
+    });
+
+    test('on a start square block nobody, not even for other seats', () {
+      // Seat 1's start square is absolute 13: a pair there is on a safe
+      // square, so it is no blockade.
+      GameState atStart(int d) => makeState(
+            rules: blockadeRules,
+            tokens: {
+              0: [10, -1, -1, -1],
+              1: [0, 0, -1, -1],
+            },
+            dice: d,
+          );
+      expect(canMove(atStart(3), 0), isTrue); // lands on 13
+      expect(canMove(atStart(5), 0), isTrue); // passes 13
     });
 
     test('on the last track square block the way into the home column', () {
@@ -94,7 +112,10 @@ void main() {
       expect(canMove(at48(6), 0), isFalse); // 54, passes 50
     });
 
-    test('on the start square keep a yard token inside', () {
+    test(
+        'of another seat on this start square do not keep a yard token '
+        'inside', () {
+      // A pair on a start square that is not their own is on a safe square.
       final state = makeState(
         rules: blockadeRules,
         tokens: {
@@ -102,7 +123,7 @@ void main() {
         },
         dice: 6,
       );
-      expect(Engine.legalMoves(state), isEmpty);
+      expect(Engine.legalMoves(state), isNotEmpty);
     });
 
     test('block every opposing seat, not only the next one', () {

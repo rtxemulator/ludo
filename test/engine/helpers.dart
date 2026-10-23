@@ -23,8 +23,12 @@ GameState makeState({
   List<int> bank = const [],
   BankPhase bankPhase = BankPhase.rolling,
   TurnSnapshot? turnSnapshot,
+  Map<int, List<int>> rest = const {},
 }) {
   return GameState(
+    rest: [
+      for (var s = 0; s < 4; s++) rest[s] ?? List<int>.filled(4, 0),
+    ],
     tokens: [
       for (var s = 0; s < 4; s++) tokens[s] ?? List<int>.filled(4, -1),
     ],

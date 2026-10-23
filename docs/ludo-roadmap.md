@@ -24,6 +24,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
    - Background isolate execution to guarantee 60 fps main thread UI.
    - Difficulty levels (Easy, Medium, Hard, Expert expectiminimax / MCTS).
    - Automated self-play tournament regression tests.
+   - Design and engine API check: `ludo-ai.md` (chats A/B/C; Expert is iterative-deepening expectimax, no MCTS).
 5. **Milestone 5 - Saves & Replays:**
    - `drift` SQLite database integration.
    - Autosave after each move, continue-last-game shortcut, and deterministic game replays from seed + move log.
@@ -45,7 +46,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
 
 ## 2. Intentionally Deferred Design Decisions
 
-- **AI Heuristic Weights & MCTS Tuning:** Detail before starting Milestone 4 (needs self-play on a working engine).
+- **AI Heuristic Weights & MCTS Tuning:** Starting weights and the MCTS decision (not in Milestone 4) are in `ludo-ai.md`; the weights are tuned by self-play in Milestone 4 chat B.
 - **UI Animation Curves & Shaders:** Resolved 2026-10-16 in `docs/ludo-animation.md` (values are starting points, tune on device).
 - **P2P Wire Protocol & ICE Negotiation:** Detail before starting Milestone 8.
 

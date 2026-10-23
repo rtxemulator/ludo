@@ -78,6 +78,8 @@ Fully configurable. See ludo-rules.md.
 
 ## 6. AI Design (Strong & Fair)
 
+Detailed design (supersedes the outline below where they differ): `ludo-ai.md`.
+
 - **Algorithm:** Expectiminimax with dice rolls as chance nodes (depth 2-3). Optional MCTS for the expert tier.
 - **Evaluation heuristics:** token progress; captures vs danger of being captured; safe-square occupation; blockade formation; bonus for entering the home column.
 - **Fairness:** AI uses only public game state and the identical seeded PRNG; it never peeks at future rolls.

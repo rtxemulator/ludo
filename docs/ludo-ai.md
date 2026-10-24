@@ -127,3 +127,51 @@ test/ai/                  # unit, fairness, purity, small tournament smoke
 - **A (this chat):** this doc, engine API check. Branch `milestone-4-ai`, no code.
 - **B:** E1/E2 with tests, then `lib/ai/` (features, eval, search, tiers, banked planner), `tool/ai_tournament.dart`, weight tuning, results in this doc. Replaces `GreedyBot` only inside `AiPlayer`; the app still uses `GreedyBot` until C. Stops with green `dart format/analyze/test` and a tournament table.
 - **C:** worker isolate, `GameController` hookup (`AiLevel` to `AiPlayer`), watchdog/fallback, settings/setup copy if levels are described anywhere, CI green, device checklist (play each level, check frame timing during AI turns). PR to main after the device review.
+
+## 11. Results (chat B)
+
+All numbers: `tool/ai_tournament.dart`, node budgets only (Medium 400, Hard 2500, Expert 8000 nodes), seats rotated and swapped on every seed, `firstToWin`, win = first place. 95% intervals are Wilson. Seeds are the harness defaults (tuning used a disjoint range).
+
+| Layout | Rules | A | B | Games | A wins | 95% CI |
+|---|---|---|---|---|---|---|
+| duel | classic | Easy | random | 1000 | 91.3% | 89.4-92.9 |
+| duel | classic | Medium | random | 1000 | 94.8% | 93.2-96.0 |
+| duel | classic | Expert | random | 1000 | 96.0% | 94.6-97.0 |
+| duel | classic | Medium | Easy | 1000 | 56.1% | 53.0-59.1 |
+| duel | classic | Hard | Medium | 1000 | 55.9% | 52.8-58.9 |
+| duel | classic | Expert | Hard | 1000 (4 x 250) | 49.1% | 46.0-52.2 |
+| duel | banked | Medium | Easy | 400 | 54.8% | 49.9-59.6 |
+| duel | banked | Hard | Medium | 300 | 54.7% | 49.0-60.2 |
+| one vs three | classic | Hard | 3 x Easy | 400 | 31.0% | 26.7-35.7 |
+| one vs three | classic | Medium | 3 x Easy | 400 | 27.8% | 23.6-32.3 |
+
+(One vs three: 25% is parity.)
+
+Against the section 9 targets:
+
+- Expert beats random 96% (target 90%): met.
+- Medium > Easy > random and Hard > Medium (classic duel, lower bound above 50%): met.
+- **Expert > Hard: not met.** 491 wins in 1000 games; Expert at 8000 nodes (depth up to 4, bonus depth 2) is statistically the same player as Hard at 2500 nodes (depth 2). Banked and 4-player rows have too few games to separate tiers; Medium vs 3 x Easy has a CI that includes parity.
+
+The ceiling is low: each tier step is worth about 6 points of win rate, which is what dice variance leaves for evaluation quality.
+
+### Tuning
+
+`tool/ai_tune.dart`: coordinate hill-climb, candidate against the champion (Medium, 300 nodes, 60% classic and 40% strategic duels, 400 games per trial on fresh seeds, accept at 55%). Two sweeps, 44 trials, every result between 45.3% and 52.8%, nothing accepted. The starting weights are therefore frozen as `AiWeights.tuned`: safe 4, finished 20, exposureScale 1, exposureBase 10, threatScale 0.5, threatBase 25, blockHold 3, blockStuck 3, waiting 6, bonusRollValue 8, out 10. Raising exposure or threat weights hurt (45-47%); the rest is flat. The weights are not the bottleneck.
+
+### Benchmark (Termux, JIT, pessimistic)
+
+Sampled positions from random classic games, measured with `--bench`: `Engine.apply` about 5k/s and `applyLegal` about 7k/s when the legal-move generation is included in the loop (chat A's 11k/s figure counted applies only); search 21-39k nodes/s. Node-capped at 50k: decision average and p95 were Medium 16 / 56 ms, Hard 25 / 77 ms, Expert 61 / 191 ms, mean completed depth 0.95 / 1.9 / 3.8 (forced moves count as depth 0). Easy vs random ran at about 55 games/s per core, so a full playout costs roughly 18 ms under JIT. Still to verify on device in Milestone 7.
+
+### Deviations from sections 2-3
+
+- The search passes `DiceRoll(face, 0)` to `Engine.applyRoll` instead of `DiceRoll(face, state.rngState)`: the fairness grep forbids any mention of `rngState` in `lib/ai`. Nothing downstream reads that field.
+- New weight `out` (tempo for each token that left the yard). Without it Medium lost to Easy (38%, 120 games); with it 56.1%.
+- Expert: max depth 4, beam 3, bonus depth 2, 250 ms. Medium: depth 1, 40 ms. Hard: depth 2, beam 3, 100 ms.
+- The transposition key is a 64-bit hash (tokens sorted per seat, seat to move, die or bank, six counter, waiting counters, search counters).
+- `tool/tournament.dart` is the shared harness; layouts are duel, one-vs-three and 2v2 teams.
+
+### MCTS (D4 revisited)
+
+D4's trigger fired: Expert is not above Hard. I still recommend against MCTS here. A random or greedy playout costs about 18 ms under JIT (maybe 5 ms in release), so 250 ms buys 15-50 playouts, while one game outcome has a standard deviation near 0.5; that cannot rank three candidate moves whose true values differ by a few points. Deeper search also did not help (above), which points at evaluation noise and Ludo's luck rather than at the search method. If Expert needs to be a real step, the cheaper experiments are, in order: (1) a learned evaluation, logistic regression of final placement on the same features over self-play positions, instead of hand-tuned weights; (2) removing or weakening the beam at Expert to see whether pruning is what flattens it; (3) only then rollouts as a tiebreak between near-equal moves.
+

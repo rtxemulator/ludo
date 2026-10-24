@@ -52,8 +52,9 @@ class AiWeights {
   /// Final placement values by rank (best first); the last place is 0.
   static const List<double> placement = [1000, 400, 150, 0];
 
-  /// The weights the tiers play with. Starting values from the design doc
-  /// until chat B's tuning run replaces them (see docs/ludo-ai.md).
+  /// The weights the tiers play with. Hill-climbing by self-play (44 trials,
+  /// `tool/ai_tune.dart`) found nothing above 52.8% against these, so they are
+  /// the hand-set starting values (results: docs/ludo-ai.md section 11).
   static const AiWeights tuned = AiWeights();
 
   static const List<String> names = [

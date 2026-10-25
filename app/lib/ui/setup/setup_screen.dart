@@ -5,6 +5,14 @@ import 'package:ludo/seats/seats.dart';
 import '../theme/palette.dart';
 import 'seat_map.dart';
 
+/// One short line per AI level: what it feels like, not how it works.
+const Map<AiLevel, String> aiLevelText = {
+  AiLevel.easy: 'Plays fast and forgives mistakes.',
+  AiLevel.medium: 'A fair opponent that sees the obvious threats.',
+  AiLevel.hard: 'Plans ahead and rarely leaves a piece hanging.',
+  AiLevel.expert: 'Thinks longest, plays strongest.',
+};
+
 /// The new-game screen: how many players, who sits where and who controls
 /// each seat (human / AI / online), the rule preset and the house rules.
 ///
@@ -162,14 +170,6 @@ class _SetupScreenState extends State<SetupScreen> {
     ];
   }
 
-  /// One short line per AI level: what it feels like, not how it works.
-  static const Map<AiLevel, String> levelText = {
-    AiLevel.easy: 'Plays fast and forgives mistakes.',
-    AiLevel.medium: 'A fair opponent that sees the obvious threats.',
-    AiLevel.hard: 'Plans ahead and rarely leaves a piece hanging.',
-    AiLevel.expert: 'Thinks longest, plays strongest.',
-  };
-
   static const Map<AiLevel, String> _levelLabel = {
     AiLevel.easy: 'Easy',
     AiLevel.medium: 'Medium',
@@ -212,7 +212,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
                       ),
-                      tooltip: '${_levelLabel[level]}: ${levelText[level]}',
+                      tooltip: '${_levelLabel[level]}: ${aiLevelText[level]}',
                     ),
                 ],
                 selected: {config.aiLevel},
@@ -224,7 +224,7 @@ class _SetupScreenState extends State<SetupScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              levelText[config.aiLevel]!,
+              aiLevelText[config.aiLevel]!,
               key: ValueKey('ai-level-text-$seat'),
               style: const TextStyle(fontSize: 13),
             ),

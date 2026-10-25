@@ -139,7 +139,7 @@ void main() {
   testWidgets('each level has its own line; Hard and Expert are called close',
       (tester) async {
     await playFrom(tester, allAi(), () async {
-      for (final entry in SetupScreen.levelText.entries) {
+      for (final entry in aiLevelText.entries) {
         await tester.tap(level(
             0, entry.key.name[0].toUpperCase() + entry.key.name.substring(1)));
         await tester.pump();
@@ -150,8 +150,8 @@ void main() {
           entry.value,
         );
       }
-      expect(SetupScreen.levelText[AiLevel.easy], contains('forgives'));
-      expect(SetupScreen.levelText[AiLevel.expert], contains('strongest'));
+      expect(aiLevelText[AiLevel.easy], contains('forgives'));
+      expect(aiLevelText[AiLevel.expert], contains('strongest'));
       expect(find.textContaining('close in strength'), findsOneWidget);
     });
   });

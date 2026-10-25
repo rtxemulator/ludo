@@ -206,7 +206,7 @@ What chat C built, against sections 2 and 8. No weight tuning, no MCTS; Expert e
 
 ### Copy
 
-The setup screen has a level picker (UI addendum): each AI seat tile shows a compact Easy / Medium / Hard / Expert selector (default Medium, key `ai-level-<seat>`, one labelled semantics node "<colour> AI level") and one line of copy per level (`SetupScreen.levelText`: Easy "Plays fast and forgives mistakes", Expert "Thinks longest, plays strongest"). A single note under the seats says Hard and Expert are close in strength (section 11: Expert is not stronger than Hard). The level lives in `SeatConfig.aiLevel`, so it reaches `GameController`, rematch (`newGame` reuses the setup) and the JSON a saved game stores. The picker has no animation, so reduced motion needs no special case. No "thinking" indicator: the table shows no seat names, so there is nowhere cheap to put one.
+The setup screen has a level picker (UI addendum): each AI seat tile shows a compact Easy / Medium / Hard / Expert selector (default Medium, key `ai-level-<seat>`, one labelled semantics node "<colour> AI level") and one line of copy per level (`aiLevelText`: Easy "Plays fast and forgives mistakes", Expert "Thinks longest, plays strongest"). A single note under the seats says Hard and Expert are close in strength (section 11: Expert is not stronger than Hard). The level lives in `SeatConfig.aiLevel`, so it reaches `GameController`, rematch (`newGame` reuses the setup) and the JSON a saved game stores. The picker has no animation, so reduced motion needs no special case. No "thinking" indicator: the table shows no seat names, so there is nowhere cheap to put one.
 
 ### Device checklist (before the PR to main)
 

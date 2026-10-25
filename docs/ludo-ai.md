@@ -175,3 +175,43 @@ Sampled positions from random classic games, measured with `--bench`: `Engine.ap
 
 D4's trigger fired: Expert is not above Hard. I still recommend against MCTS here. A random or greedy playout costs about 18 ms under JIT (maybe 5 ms in release), so 250 ms buys 15-50 playouts, while one game outcome has a standard deviation near 0.5; that cannot rank three candidate moves whose true values differ by a few points. Deeper search also did not help (above), which points at evaluation noise and Ludo's luck rather than at the search method. If Expert needs to be a real step, the cheaper experiments are, in order: (1) a learned evaluation, logistic regression of final placement on the same features over self-play positions, instead of hand-tuned weights; (2) removing or weakening the beam at Expert to see whether pruning is what flattens it; (3) only then rollouts as a tiebreak between near-equal moves.
 
+
+## 12. Worker and controller hookup (chat C)
+
+What chat C built, against sections 2 and 8. No weight tuning, no MCTS; Expert equalling Hard (section 11) is a known result.
+
+### Code
+
+- `lib/ai/worker.dart`: `AiRequest {id, state, legal, level, budgetMillis}`, `AiResponse {id, index}` (`index == null` means failed), `AiBackend` (`send`, `close`, `alive`), `AiWorker` (the real isolate; requests sent while it spawns are queued; an uncaught error or exit turns every request in flight into a failure and `alive` false), `InlineAiBackend` (same computation on the calling isolate with node budgets, for tests) and `aiWorkerMain` (the isolate entry). `answerRequest` never throws.
+- `lib/ai/turn_driver.dart`: `AiTurnDriver`, the pure Dart state machine, driven by frame-clock milliseconds (no timers, so tests do not wait). `begin` sends at once, `poll(now, state)` returns the move once `max(think time, compute time)` has passed, `cancel` and `dispose` drop it.
+- `app/lib/game/game_controller.dart`: `_driveAi` rolls by itself as before (700 ms, 250 ms with reduced motion). For a move it calls `begin` the first frame the choice is due and `poll` every frame. The think pause is 650 ms (250 ms reduced), unchanged. `GameController(aiDriver:)` is injectable; the controller tests use `AiTurnDriver.inline()` (node budgets, deterministic).
+
+### Behaviour
+
+- **Easy** stays `GreedyBot` and never touches the worker. A single legal move is played without a request for every level.
+- **Medium, Hard, Expert** go through the worker with the time budgets of D5 (40, 100, 250 ms; node budgets stay for tests and tournaments).
+- **Lifetime:** the worker is spawned when a game starts with a Medium, Hard or Expert seat (an Easy-only table needs none) and shut down by `GameController.dispose`, which the game screen calls when it closes. A second game on the same screen reuses it.
+- **Stale answers:** every request has an id and remembers the exact `GameState` it was made for. `newGame`, a banked dead-end revert, a turn that is no longer an AI turn, and `dispose` cancel it; a different `state` at `poll` drops it too. An answer with another id is ignored.
+- **Watchdog (D9):** no answer 600 ms after the request, a crashed worker, a failed response, or an index outside the legal list: `GreedyBot` plays (after the usual think time) and `fallbackCount` / `lastFallback` (`timeout`, `crashed`, `invalid`) record why. After a timeout the worker is closed and a fresh one starts on the next request, because a worker still busy with a stuck search would delay every later answer. The engine still validates every move through `Engine.apply`.
+
+### Isolate transfer
+
+`GameState` (with its unmodifiable lists), `RulesConfig`, `TurnSnapshot` and `Move` cross a `SendPort` unchanged. `test/ai/worker_test.dart` sends them through a real isolate (classic, banked rolls with a snapshot, teams, every blockade option) and compares with `==`, then runs the real `AiWorker` for the answer, the crash, the silent and the bad-index cases.
+
+### Tests
+
+- `test/ai/turn_driver_test.dart`: think delay vs compute time, stale ids, other state, timeout, crash, invalid index (both sides), worker replacement, Easy and forced moves, dispose.
+- `test/ai/worker_test.dart`: port round trips and the real worker (see above).
+- `app/test/ai_worker_flow_test.dart` (CI only): the same cases through `GameController` with a scripted backend and the fake frame clock, including whole games with a worker that never answers (classic and banked).
+
+### Copy
+
+No setup or settings text describes the levels (the setup screen has no level picker yet), so there is no copy to change. The `AiLevel` doc comment no longer says every level plays the greedy baseline.
+
+### Device checklist (before the PR to main)
+
+1. Play a 2-player game against each of Easy, Medium, Hard, Expert; the AI should feel like the old pause, never longer than about a second.
+2. Frame timing during AI turns (frame-timing overlay, profile APK): no spikes while Hard or Expert think; the search runs off the UI isolate.
+3. 4-player games with AI seats: banked rolls on, and each blockade option on; the AI answers every choice (no stalls, no illegal move errors).
+4. Rewind: a banked dead end ("Turn undone") while an AI seat is next; New game from the menu during an AI turn; quit to setup during an AI turn and start another game.
+5. Optional: put the phone under load (a build running in Termux) and check that a slow AI turn falls back to the greedy move instead of freezing.

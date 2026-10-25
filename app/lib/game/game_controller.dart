@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:ludo/ai/ai.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/ui/core/haptics.dart';
 import 'package:ludo/ui/core/bank_choice.dart';
@@ -43,8 +44,10 @@ class GameController extends ChangeNotifier {
     double Function()? now,
     bool haptics = true,
     HapticsService? hapticsService,
+    AiTurnDriver? aiDriver,
   })  : _setup = setup ?? MatchSetup.hotSeat(rules: rules),
         _now = now ?? _stopwatchClock(),
+        _ai = aiDriver ?? AiTurnDriver(),
         feedback = hapticsService ?? HapticsService() {
     feedback.enabled = haptics;
     newGame(seed: seed);
@@ -59,7 +62,10 @@ class GameController extends ChangeNotifier {
 
   MatchSetup _setup;
   final double Function() _now;
-  static const GreedyBot _bot = GreedyBot();
+
+  /// Computes the moves of the Medium, Hard and Expert seats off the UI
+  /// isolate (worker, watchdog and baseline-bot fallback live in there).
+  final AiTurnDriver _ai;
 
   /// Who sits where and who controls each seat.
   MatchSetup get setup => _setup;
@@ -87,6 +93,12 @@ class GameController extends ChangeNotifier {
   bool get aiTurn =>
       (phase == GamePhase.awaitingRoll || phase == GamePhase.awaitingMove) &&
       isAi(state.currentSeat);
+
+  /// Whether a seat that plays on the worker (Medium, Hard, Expert) sits at
+  /// the table; Easy needs no worker.
+  bool get _hasSearchingAi => _setup.activeSeats.any(
+        (seat) => isAi(seat) && _setup.configOf(seat).aiLevel != AiLevel.easy,
+      );
 
   /// Think time before an AI seat rolls, and before it picks a move (ms).
   static const double aiRollDelayMs = 700;
@@ -223,6 +235,11 @@ class GameController extends ChangeNotifier {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
     state = _setup.newGame(s);
     _aiDueMs = null;
+    // An answer for the old game must never be played in the new one.
+    _ai.cancel();
+    if (_hasSearchingAi) {
+      _ai.warmUp();
+    }
     _clearVariants();
     phase = GamePhase.awaitingRoll;
     legal = const [];
@@ -662,27 +679,47 @@ class GameController extends ChangeNotifier {
   /// Lets an AI seat roll and choose: after a short think time it presses the
   /// same buttons a person would, so the animations, haptics and rules flow
   /// are identical for both.
+  ///
+  /// Rolling is automatic. A move is a small state machine in [_ai]: the
+  /// request goes to the worker the moment the choice is due, and the answer
+  /// plays after `max(think time, compute time)`, so the search hides inside
+  /// the usual pause. A late, crashed or nonsensical worker means the
+  /// baseline bot plays; the game never waits for the AI.
   void _driveAi(double now) {
     if (!aiTurn) {
       _aiDueMs = null;
+      _ai.cancel();
       return;
     }
     if (phase == GamePhase.awaitingMove && _autoMove != null) {
       // A forced spend of the bank goes by itself.
       return;
     }
-    final slow =
-        phase == GamePhase.awaitingRoll ? aiRollDelayMs : aiMoveDelayMs;
-    final due =
-        _aiDueMs ??= now + (spec.reducedMotion ? aiReducedDelayMs : slow);
-    if (now < due) {
+    final reduced = spec.reducedMotion;
+    if (phase == GamePhase.awaitingRoll) {
+      final due =
+          _aiDueMs ??= now + (reduced ? aiReducedDelayMs : aiRollDelayMs);
+      if (now >= due) {
+        _aiDueMs = null;
+        roll();
+      }
       return;
     }
-    _aiDueMs = null;
-    if (phase == GamePhase.awaitingRoll) {
-      roll();
-    } else if (legal.isNotEmpty) {
-      _startMove(_bot.choose(state, legal));
+    if (legal.isEmpty) {
+      return;
+    }
+    if (!_ai.busy) {
+      _ai.begin(
+        nowMs: now,
+        thinkMs: reduced ? aiReducedDelayMs : aiMoveDelayMs,
+        state: state,
+        legal: legal,
+        level: _setup.configOf(state.currentSeat).aiLevel,
+      );
+    }
+    final move = _ai.poll(now, state);
+    if (move != null) {
+      _startMove(move);
     }
   }
 
@@ -767,6 +804,7 @@ class GameController extends ChangeNotifier {
         tray.append(seat, result.value, now);
         tray.exitAll(seat, ChipExit.revert, now, delayMs: delay);
         message = 'Turn undone';
+        _ai.cancel();
         toasts[seat] = DockToast(message!, now);
         feedback.play(HapticEvent.noMove);
         final anim = RevertAnimation.plan(
@@ -893,6 +931,7 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _ai.dispose();
     clock.dispose();
     feedback.dispose();
     super.dispose();

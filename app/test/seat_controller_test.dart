@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ludo/ai/ai.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
@@ -37,6 +38,7 @@ void main() {
       setup: MatchSetup.hotSeat(players: 2),
       seed: 1,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     );
     expect(game.state.activeSeats, [0, 2]);
     expect(game.setup.playerCount, 2);
@@ -54,6 +56,7 @@ void main() {
       setup: MatchSetup.hotSeat(players: 3),
       seed: 1,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     );
     game.setBankedRolls(true);
     expect(game.banked, isTrue);
@@ -70,6 +73,7 @@ void main() {
       seed: 3,
       now: () => t,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     );
     expect(game.aiTurn, isTrue);
 
@@ -88,6 +92,7 @@ void main() {
       seed: 5,
       now: () => t,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     );
     game.tick();
     expect(game.phase, GamePhase.awaitingRoll);
@@ -110,6 +115,7 @@ void main() {
       seed: 8,
       now: () => t,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     )..spec = MotionSpec.reduced;
     run(
       game,
@@ -128,6 +134,7 @@ void main() {
       seed: 21,
       now: () => t,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     )..spec = MotionSpec.reduced;
     run(
       game,
@@ -146,6 +153,7 @@ void main() {
       seed: 14,
       now: () => t,
       haptics: false,
+      aiDriver: AiTurnDriver.inline(),
     )..spec = MotionSpec.reduced;
     final seen = <int>{};
     run(
@@ -184,6 +192,7 @@ void main() {
         seed: 33,
         now: () => t,
         haptics: false,
+        aiDriver: AiTurnDriver.inline(),
       )..spec = MotionSpec.reduced;
       run(
         game,

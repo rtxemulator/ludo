@@ -10,4 +10,6 @@ export 'eval.dart';
 export 'features.dart';
 export 'position_key.dart';
 export 'search.dart';
+export 'turn_driver.dart';
 export 'weights.dart';
+export 'worker.dart';

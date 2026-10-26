@@ -117,14 +117,29 @@ abstract final class Engine {
     if (state.isOver) {
       throw StateError('The game is over.');
     }
+    return applyRoll(state, Dice.roll(state.rngState));
+  }
+
+  /// [roll] with the die supplied instead of drawn from `state.rngState`.
+  ///
+  /// This is the chance-node primitive for look-ahead (the AI): hand it
+  /// `DiceRoll(face, state.rngState)` and the PRNG is never advanced or read,
+  /// while forfeits, auto-passes and banked outcomes follow exactly the same
+  /// code as [roll]. `roll(state)` is `applyRoll(state, Dice.roll(rngState))`.
+  static RollResult applyRoll(GameState state, DiceRoll drawn) {
+    if (state.isOver) {
+      throw StateError('The game is over.');
+    }
+    if (drawn.value < 1 || drawn.value > 6) {
+      throw ArgumentError.value(drawn.value, 'drawn', 'face must be 1..6');
+    }
     if (state.rules.bankedRolls) {
-      return _rollBanked(state);
+      return _rollBanked(state, drawn);
     }
     if (state.dice != null) {
       throw StateError('A roll is already pending; choose a move first.');
     }
 
-    final drawn = Dice.roll(state.rngState);
     final value = drawn.value;
     final sixes = value == 6 ? state.consecutiveSixes + 1 : 0;
 
@@ -158,12 +173,11 @@ abstract final class Engine {
   }
 
   /// Banked rolling phase: one die into the bank ("Roll All First").
-  static RollResult _rollBanked(GameState state) {
+  static RollResult _rollBanked(GameState state, DiceRoll drawn) {
     if (state.bankPhase == BankPhase.moving) {
       throw StateError('Spend the banked dice first.');
     }
     final rules = state.rules;
-    final drawn = Dice.roll(state.rngState);
     final value = drawn.value;
 
     // A 6 keeps the sequence going; anything else (or a 6 without
@@ -642,7 +656,22 @@ abstract final class Engine {
     if (legal.isEmpty) {
       throw IllegalMoveException('$move is not legal with a $dice.');
     }
-    final chosen = legal.first;
+    return _applyChosen(state, legal.first, dice);
+  }
+
+  /// [apply] without re-validation: [move] must be one of
+  /// `legalMoves(state)` (as returned, `dieIndex` included). Handing it
+  /// anything else gives undefined results. Meant for search code that
+  /// already holds the legal list; the controller and network paths keep
+  /// using the validated [apply].
+  static GameState applyLegal(GameState state, Move move) {
+    if (state.rules.bankedRolls) {
+      return _applyBankedChosen(state, move);
+    }
+    return _applyChosen(state, move, state.dice!);
+  }
+
+  static GameState _applyChosen(GameState state, Move chosen, int dice) {
     final owner = chosen.owner;
 
     final effects = _effects(state, chosen);
@@ -689,7 +718,10 @@ abstract final class Engine {
         '$move is not legal with the bank ${state.bank}.',
       );
     }
-    final chosen = legal.first;
+    return _applyBankedChosen(state, legal.first);
+  }
+
+  static GameState _applyBankedChosen(GameState state, Move chosen) {
     final owner = chosen.owner;
     final rest = [...state.bank]..removeAt(chosen.dieIndex);
 

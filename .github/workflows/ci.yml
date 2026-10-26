@@ -34,6 +34,17 @@ jobs:
             exit 1
           fi
 
+      - name: AI purity (no Flutter imports, no dice access)
+        run: |
+          if grep -rn "package:flutter" lib/ai/; then
+            echo "::error::lib/ai/ must never import Flutter"
+            exit 1
+          fi
+          if grep -rnE "rngState|Dice\.(roll|nextRaw)|Engine\.roll\(" lib/ai/; then
+            echo "::error::lib/ai/ must never draw a die or read the generator state"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: dart pub get
 

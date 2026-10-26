@@ -5,6 +5,14 @@ import 'package:ludo/seats/seats.dart';
 import '../theme/palette.dart';
 import 'seat_map.dart';
 
+/// One short line per AI level: what it feels like, not how it works.
+const Map<AiLevel, String> aiLevelText = {
+  AiLevel.easy: 'Plays fast and forgives mistakes.',
+  AiLevel.medium: 'A fair opponent that sees the obvious threats.',
+  AiLevel.hard: 'Plans ahead and rarely leaves a piece hanging.',
+  AiLevel.expert: 'Thinks longest, plays strongest.',
+};
+
 /// The new-game screen: how many players, who sits where and who controls
 /// each seat (human / AI / online), the rule preset and the house rules.
 ///
@@ -152,14 +160,78 @@ class _SetupScreenState extends State<SetupScreen> {
       for (final seat in _setup.activeSeats) _seatTile(seat, palette),
       if (_setup.activeSeats.any((s) => _setup.configOf(s).isAi))
         const Padding(
-          padding: EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: 6),
           child: Text(
-            'AI seats play a basic greedy game for now; stronger levels '
-            'come later.',
+            'Hard and Expert are close in strength; Expert just thinks '
+            'longer. Dice luck still decides plenty at every level.',
             style: TextStyle(fontSize: 12),
           ),
         ),
     ];
+  }
+
+  static const Map<AiLevel, String> _levelLabel = {
+    AiLevel.easy: 'Easy',
+    AiLevel.medium: 'Medium',
+    AiLevel.hard: 'Hard',
+    AiLevel.expert: 'Expert',
+  };
+
+  /// Compact level selector for an AI seat. No animation of its own, so
+  /// reduced motion needs no special case; the group is one labelled
+  /// semantics node ("Red AI level") and each segment reads its own label.
+  Widget _levelPicker(int seat, SeatConfig config) {
+    final name = _setup.displayName(seat);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            container: true,
+            label: '$name AI level',
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<AiLevel>(
+                key: ValueKey('ai-level-$seat'),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                ),
+                segments: [
+                  for (final level in AiLevel.values)
+                    ButtonSegment(
+                      value: level,
+                      label: Text(
+                        _levelLabel[level]!,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      tooltip: '${_levelLabel[level]}: ${aiLevelText[level]}',
+                    ),
+                ],
+                selected: {config.aiLevel},
+                onSelectionChanged: (v) => _update(
+                    _setup.withSeat(seat, config.copyWith(aiLevel: v.first))),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              aiLevelText[config.aiLevel]!,
+              key: ValueKey('ai-level-text-$seat'),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _seatTile(int seat, LudoPalette palette) {
@@ -218,6 +290,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     _setup.withSeat(seat, config.copyWith(type: v.first))),
               ),
             ),
+            if (config.isAi) _levelPicker(seat, config),
           ],
         ),
       ),

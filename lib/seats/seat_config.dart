@@ -11,8 +11,9 @@ enum SeatType {
   remote,
 }
 
-/// Strength of an AI seat. Stored now so saves and setups already carry it;
-/// every level plays the same greedy baseline until Milestone 4.
+/// Strength of an AI seat (saved with the setup). Easy is the greedy
+/// baseline (`GreedyBot`); Medium, Hard and Expert are the expectimax tiers of
+/// `lib/ai/` (`docs/ludo-ai.md`).
 enum AiLevel { easy, medium, hard, expert }
 
 /// Default display names of the four seats (clockwise from the top-left

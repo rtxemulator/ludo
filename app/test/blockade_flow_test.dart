@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ludo/ai/ai.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
@@ -215,6 +216,7 @@ void main() {
         seed: 4,
         now: () => t,
         haptics: false,
+        aiDriver: AiTurnDriver.inline(),
       )..spec = MotionSpec.reduced;
       for (var i = 0; i < 400000 && game.phase != GamePhase.gameOver; i++) {
         t += 100;

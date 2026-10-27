@@ -32,6 +32,12 @@ void main() {
       final junk = SeatConfig.fromJson({'type': 'robot', 'aiLevel': 7});
       expect(junk, const SeatConfig());
     });
+
+    test('a name that is not a string falls back instead of throwing', () {
+      for (final name in <Object?>[7, true, [], {}, 1.5]) {
+        expect(SeatConfig.fromJson({'name': name}), const SeatConfig());
+      }
+    });
   });
 
   group('MatchSetup layout', () {

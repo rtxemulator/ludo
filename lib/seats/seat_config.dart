@@ -82,7 +82,7 @@ class SeatConfig {
     return SeatConfig(
       type: _byName(SeatType.values, json['type'], SeatType.human),
       aiLevel: _byName(AiLevel.values, json['aiLevel'], AiLevel.medium),
-      name: _cleanName(json['name'] as String?),
+      name: _cleanName(json['name'] is String ? json['name'] as String : null),
     );
   }
 

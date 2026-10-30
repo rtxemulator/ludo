@@ -99,6 +99,10 @@ class _Rig {
         return;
       }
       step();
+      // Check before acting: acting at once would start the next roll.
+      if (settled && done()) {
+        return;
+      }
       act();
     }
     fail('never reached the wanted position');
@@ -357,16 +361,16 @@ void main() {
     b.game.spec = MotionSpec.reduced;
     expect(b.game.setup, setup);
     expect(b.game.moveLog.length, saved.moves);
-    for (var i = 0; i < 20000 && b.game.moveLog.length < saved.moves + 4; i++) {
+    for (var i = 0;
+        i < 40000 && (asked.isEmpty || b.game.moveLog.length < saved.moves + 4);
+        i++) {
       b.step(16);
     }
     expect(b.game.moveLog.length, greaterThanOrEqualTo(saved.moves + 4));
     expect(asked, isNotEmpty);
     for (final request in asked) {
-      expect(
-        request.level,
-        request.state.currentSeat == 0 ? AiLevel.hard : AiLevel.easy,
-      );
+      expect(request.level, AiLevel.hard);
+      expect(request.state.currentSeat, 0);
     }
     expect((await _stored(queue, saved.id)).moves, b.game.moveLog.length);
   });

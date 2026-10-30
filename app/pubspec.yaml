@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   ludo:
     path: ..
+  shared_preferences: ^2.3.0
+  sqflite: ^2.3.3
 
 dev_dependencies:
   flutter_test:

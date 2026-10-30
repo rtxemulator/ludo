@@ -7,16 +7,26 @@ export 'package:ludo/ui/core/table_layout.dart' show UiOrientation;
 /// Reduce-motion override: follow the system, or force it on / off.
 enum ReduceMotion { system, on, off }
 
-/// User settings. In memory only for now (`shared_preferences` arrives with
-/// Milestone 6); every change notifies the screen.
+/// User settings; every change notifies the screen. `SettingsStore` saves
+/// them to disk and restores them at launch.
 class GameSettings extends ChangeNotifier {
-  GameSettings({bool haptics = true}) : _haptics = haptics;
+  GameSettings({
+    bool haptics = true,
+    ReduceMotion reduceMotion = ReduceMotion.system,
+    UiOrientation orientation = UiOrientation.table,
+    bool autoRotateShared = true,
+    bool frameOverlay = false,
+  })  : _haptics = haptics,
+        _reduceMotion = reduceMotion,
+        _orientation = orientation,
+        _autoRotateShared = autoRotateShared,
+        _frameOverlay = frameOverlay;
 
   bool _haptics;
-  ReduceMotion _reduceMotion = ReduceMotion.system;
-  UiOrientation _orientation = UiOrientation.table;
-  bool _autoRotateShared = true;
-  bool _frameOverlay = false;
+  ReduceMotion _reduceMotion;
+  UiOrientation _orientation;
+  bool _autoRotateShared;
+  bool _frameOverlay;
 
   bool get haptics => _haptics;
   ReduceMotion get reduceMotion => _reduceMotion;

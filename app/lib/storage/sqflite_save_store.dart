@@ -158,7 +158,6 @@ CREATE TABLE $table (
     return text is String ? text : '';
   }
 
-  static DateTime? _time(Object? ms) => ms is int
-      ? DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true)
-      : null;
+  static DateTime? _time(Object? ms) =>
+      ms is int ? DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true) : null;
 }

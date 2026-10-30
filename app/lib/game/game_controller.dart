@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:ludo/ai/ai.dart';
 import 'package:ludo/engine/ludo_engine.dart';
@@ -13,6 +15,7 @@ import 'package:ludo/ui/core/motion_spec.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/seats/seats.dart';
+import 'package:ludo/storage/storage.dart';
 import 'package:ludo/ui/core/revert_plan.dart';
 
 import '../haptics/haptics_service.dart';
@@ -45,12 +48,20 @@ class GameController extends ChangeNotifier {
     bool haptics = true,
     HapticsService? hapticsService,
     AiTurnDriver? aiDriver,
+    SaveWriteQueue? saves,
+    DateTime Function()? wallClock,
+    GameSave? resumeFrom,
   })  : _setup = setup ?? MatchSetup.hotSeat(rules: rules),
         _now = now ?? _stopwatchClock(),
         _ai = aiDriver ?? AiTurnDriver(),
+        _saves = saves,
+        _wall = wallClock ?? DateTime.now,
         feedback = hapticsService ?? HapticsService() {
     feedback.enabled = haptics;
-    newGame(seed: seed);
+    if (resumeFrom == null || !resume(resumeFrom)) {
+      newGame(seed: seed);
+    }
+    _saveErrors = _saves?.errors.listen(_onSaveError);
   }
 
   static double Function() _stopwatchClock() {
@@ -62,6 +73,36 @@ class GameController extends ChangeNotifier {
 
   MatchSetup _setup;
   final double Function() _now;
+
+  // ---- Autosave (docs/ludo-saves.md) --------------------------------------
+
+  final SaveWriteQueue? _saves;
+  final DateTime Function() _wall;
+  StreamSubscription<Object>? _saveErrors;
+
+  /// The seed the current game was dealt from; kept for the save.
+  int _seed = 0;
+
+  /// The decisions made so far (the same list the save holds).
+  List<MoveLogEntry> _log = const [];
+
+  /// The save of the current game; `null` until the first decision.
+  GameSave? _save;
+
+  /// Set by [debugLoad]: the state no longer derives from the seed and log,
+  /// so nothing may be saved.
+  bool _autosaveOff = false;
+  bool _saveNoticeShown = false;
+
+  /// The seed of the current game.
+  int get seed => _seed;
+
+  /// The save of the current game, or `null` before the first decision (or
+  /// without a store).
+  GameSave? get save => _save;
+
+  /// Decisions logged so far.
+  List<MoveLogEntry> get moveLog => _log;
 
   /// Computes the moves of the Medium, Hard and Expert seats off the UI
   /// isolate (worker, watchdog and baseline-bot fallback live in there).
@@ -233,7 +274,56 @@ class GameController extends ChangeNotifier {
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
     final s = seed ?? (DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
+    // A new game (rematch, rule change) is a new save; the old one stays.
+    _seed = s;
+    _log = const [];
+    _save = null;
+    _autosaveOff = false;
+    _saveNoticeShown = false;
     state = _setup.newGame(s);
+    _resetTable();
+    notifyListeners();
+  }
+
+  /// Continues [save]: the state comes from replaying it, and autosave
+  /// carries on with the same save, seed and log. Returns `false` (leaving
+  /// the table untouched) when the save cannot be replayed or is over.
+  bool resume(GameSave save) {
+    final replay = SaveReplayer.replay(save);
+    if (!replay.resumable) {
+      return false;
+    }
+    _setup = save.setup;
+    _seed = save.seed;
+    _log = save.log;
+    _save = save;
+    _autosaveOff = false;
+    _saveNoticeShown = false;
+    state = replay.state!;
+    _resetTable();
+    rollerSeat = state.currentSeat;
+    final now = _now();
+    if (banked) {
+      // Chips that were on the table are simply there, not flying in.
+      tray.reconcile(state.currentSeat, state.bank, now);
+    }
+    if (state.awaitingMove) {
+      if (banked) {
+        _enterMoving();
+      } else {
+        legal = Engine.legalMoves(state);
+        phase = GamePhase.awaitingMove;
+      }
+    } else if (state.awaitingRoll) {
+      phase = GamePhase.awaitingRoll;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Everything that belongs to the table rather than the game: animation
+  /// state, toasts, tray, timers. [state] is already set.
+  void _resetTable() {
     _aiDueMs = null;
     // An answer for the old game must never be played in the new one.
     _ai.cancel();
@@ -268,13 +358,13 @@ class GameController extends ChangeNotifier {
     prevActiveSeat = null;
     activeSinceMs = -1e9;
     _refreshLayout();
-    notifyListeners();
   }
 
   /// Test hook: puts the table in [loaded] (a state with a pending die or,
   /// with banked rolls, in the moving phase) as if it had been rolled.
   @visibleForTesting
   void debugLoad(GameState loaded) {
+    _autosaveOff = true;
     state = loaded;
     diceSeat = loaded.currentSeat;
     rollerSeat = diceSeat;
@@ -856,7 +946,12 @@ class GameController extends ChangeNotifier {
 
   void _startMove(Move move) {
     final before = state;
+    final entry =
+        _autosaveOff || _saves == null ? null : Engine.logEntry(before, move);
     final after = Engine.apply(before, move);
+    if (entry != null) {
+      _autosave(entry, after);
+    }
     final start = _now();
     _autoMove = null;
     _clearVariants();
@@ -889,6 +984,43 @@ class GameController extends ChangeNotifier {
     _impactFired = false;
     legal = const [];
     phase = GamePhase.moving;
+    notifyListeners();
+  }
+
+  /// Logs [entry] and queues the whole save. [after] is exactly what
+  /// `Engine.apply` returned (never a post-roll state), so the save's check
+  /// fingerprint matches what a replay produces. Never blocks play: the
+  /// write is queued and a failure only raises one quiet notice.
+  void _autosave(MoveLogEntry entry, GameState after) {
+    final queue = _saves;
+    if (queue == null) {
+      return;
+    }
+    try {
+      final wall = _wall();
+      final next = (_save ??
+              GameSave.begin(
+                id: GameSave.newId(wall),
+                now: wall,
+                setup: _setup,
+                seed: _seed,
+              ))
+          .withEntry(entry, after, wall);
+      _save = next;
+      _log = next.log;
+      queue.put(next);
+    } on Object {
+      _onSaveError(StateError('autosave failed'));
+    }
+  }
+
+  void _onSaveError(Object error) {
+    if (_saveNoticeShown) {
+      return;
+    }
+    _saveNoticeShown = true;
+    final seat = state.currentSeat;
+    toasts[seat] = DockToast('Not saved', _now());
     notifyListeners();
   }
 
@@ -931,6 +1063,7 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _saveErrors?.cancel();
     _ai.dispose();
     clock.dispose();
     feedback.dispose();

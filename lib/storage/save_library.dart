@@ -1,4 +1,5 @@
 import 'game_save.dart';
+import 'replay_script.dart';
 import 'save_replayer.dart';
 import 'save_store.dart';
 import 'save_write_queue.dart';
@@ -22,6 +23,53 @@ class SaveCheck {
 
   /// Whether the game can be continued (replayed cleanly and not over).
   bool get resumable => replay?.resumable ?? false;
+}
+
+/// The outcome of opening one save for the replay viewer.
+class ReplayOpening {
+  const ReplayOpening._(this.script, this.salvaged, this.problem);
+
+  /// A save that can be played, whole or in part.
+  const ReplayOpening.ready(ReplayScript script, {bool salvaged = false})
+      : this._(script, salvaged, null);
+
+  /// A save with nothing to replay; [problem] says why.
+  const ReplayOpening.refused(String problem) : this._(null, false, problem);
+
+  /// What the viewer plays; `null` when refused.
+  final ReplayScript? script;
+
+  /// Whether the file was damaged and only its readable start is played.
+  final bool salvaged;
+
+  final String? problem;
+
+  bool get ok => script != null;
+
+  /// Whether the replay stops before the game did (a damaged log, or an
+  /// entry the engine refused): the viewer says so.
+  bool get partial => salvaged || (script?.partial ?? false);
+
+  /// Decisions the viewer can play.
+  int get playable => script?.length ?? 0;
+
+  /// Opens [save] as it is in memory (the game just played). A save whose
+  /// final state does not match its fingerprint is refused, like a row that
+  /// fails verification; one with an entry the engine rejects replays up to
+  /// that entry.
+  static ReplayOpening of(GameSave save, {bool salvaged = false}) {
+    if (!salvaged) {
+      final failure = SaveReplayer.replay(save).failure;
+      if (failure != null && failure.incompatible) {
+        return ReplayOpening.refused(failure.message);
+      }
+    }
+    final script = ReplayScript.of(save);
+    if (!script.hasMoves) {
+      return const ReplayOpening.refused('there is nothing to replay');
+    }
+    return ReplayOpening.ready(script, salvaged: salvaged);
+  }
 }
 
 /// What the screens use: the store, its write queue, and lazy verification.
@@ -75,6 +123,31 @@ class SaveLibrary {
     }
     _checks[key] = check;
     return check;
+  }
+
+  /// Opens [item] for the replay viewer: any readable save (finished or in
+  /// progress), and a damaged one up to its last valid entry. Waits for
+  /// pending writes first and then reads the stored row, so it never sees a
+  /// half-written log (a write replaces the whole row). Never throws.
+  Future<ReplayOpening> openReplay(SaveListItem item) async {
+    try {
+      await queue.flush();
+      final decoded = await store.get(item.id);
+      if (decoded == null) {
+        return const ReplayOpening.refused('missing');
+      }
+      final whole = decoded.save;
+      if (whole != null) {
+        return ReplayOpening.of(whole);
+      }
+      final salvage = decoded.failure?.salvage;
+      if (salvage == null) {
+        return ReplayOpening.refused(decoded.failure?.message ?? 'unreadable');
+      }
+      return ReplayOpening.of(salvage, salvaged: true);
+    } on Object catch (e) {
+      return ReplayOpening.refused('$e');
+    }
   }
 
   /// The most recently updated save that can be continued, or `null`.

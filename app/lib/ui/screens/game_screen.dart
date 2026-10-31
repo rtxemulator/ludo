@@ -23,6 +23,7 @@ class GameScreen extends StatefulWidget {
     this.saves,
     this.resumeFrom,
     this.onSetup,
+    this.onReplay,
   });
 
   final GameController? controller;
@@ -44,6 +45,10 @@ class GameScreen extends StatefulWidget {
   /// What "Players & rules" in the menu does. When omitted it goes back one
   /// screen (and is hidden when there is none).
   final VoidCallback? onSetup;
+
+  /// "Watch replay" at game over: called with the save of the game just
+  /// played (shown only when the game has one). `null` hides the button.
+  final ValueChanged<GameSave>? onReplay;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -134,6 +139,14 @@ class _GameScreenState extends State<GameScreen>
           settings: _settings,
           palette: palette,
           shaders: _shaders!,
+          onReplay: widget.onReplay == null
+              ? null
+              : () {
+                  final save = _game.save;
+                  if (save != null) {
+                    widget.onReplay!(save);
+                  }
+                },
           // Back to the setup screen, when this screen was opened from it.
           onSetup: widget.onSetup ??
               (Navigator.of(context).canPop()

@@ -8,19 +8,30 @@ import 'save_text.dart';
 /// The list appears at once (decoding only). Each row is then replayed
 /// lazily, one at a time between frames, and rows that fail or come from a
 /// newer app are greyed out ("Can't open"); deleting them still works.
-/// Tapping an unfinished game resumes it; finished games are shown disabled
-/// until replay arrives.
+/// Tapping an unfinished game resumes it; tapping a finished one replays it.
+/// Every row that can be opened also has "Replay" in its menu. A damaged save
+/// that still has a readable start (or whose replay stops at some move) is
+/// greyed for resuming but can be replayed up to that point.
 class SavedGamesScreen extends StatefulWidget {
   const SavedGamesScreen({
     super.key,
     required this.library,
     required this.onOpen,
+    required this.onReplay,
+    required this.onNewGame,
   });
 
   final SaveLibrary library;
 
   /// Resume [save]; completes when the user comes back.
   final Future<void> Function(GameSave save) onOpen;
+
+  /// Watch [opening] (a whole replay or the readable part of a damaged
+  /// save); completes when the user comes back. Replays never write.
+  final Future<void> Function(ReplayOpening opening) onReplay;
+
+  /// "New game" in the empty state.
+  final VoidCallback onNewGame;
 
   @override
   State<SavedGamesScreen> createState() => _SavedGamesScreenState();
@@ -104,6 +115,32 @@ class _SavedGamesScreenState extends State<SavedGamesScreen> {
     }
   }
 
+  /// Moves of a greyed row that a replay can still play (`0`: none).
+  int _partialMoves(SaveListItem item) {
+    final salvaged = item.salvagedMoves ?? 0;
+    final check = _checks[item.id];
+    final replayable = check == null || check.ok ? 0 : check.partialMoves;
+    return salvaged > replayable ? salvaged : replayable;
+  }
+
+  /// Whether the row has anything to replay.
+  bool _canReplay(SaveListItem item) =>
+      !_cannotOpen(item) || _partialMoves(item) > 0;
+
+  Future<void> _replay(SaveListItem item) async {
+    final opening = await widget.library.openReplay(item);
+    if (!mounted) {
+      return;
+    }
+    if (!opening.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("This game can't be replayed.")),
+      );
+      return;
+    }
+    await widget.onReplay(opening);
+  }
+
   Future<void> _rename(SaveListItem item) async {
     final name = await showDialog<String>(
       context: context,
@@ -162,9 +199,20 @@ class _SavedGamesScreenState extends State<SavedGamesScreen> {
     } else if (items == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (items.isEmpty) {
-      body = const Center(
-        key: ValueKey('saved-empty'),
-        child: Text('No saved games yet.'),
+      body = Center(
+        key: const ValueKey('saved-empty'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('No saved games yet.'),
+            const SizedBox(height: 16),
+            FilledButton(
+              key: const ValueKey('saved-new-game'),
+              onPressed: widget.onNewGame,
+              child: const Text('New game'),
+            ),
+          ],
+        ),
       );
     } else {
       body = ListView.builder(
@@ -182,7 +230,8 @@ class _SavedGamesScreenState extends State<SavedGamesScreen> {
     final theme = Theme.of(context);
     final broken = _cannotOpen(item);
     final finished = item.finished && !broken;
-    final tappable = !broken && !finished;
+    final partial = broken ? _partialMoves(item) : 0;
+    final tappable = !broken;
     final status = broken
         ? "Can't open"
         : finished
@@ -193,7 +242,9 @@ class _SavedGamesScreenState extends State<SavedGamesScreen> {
       if (!broken) formatSaveDate(item.updatedAt) else '',
       if (who.isNotEmpty) who,
     ].where((l) => l.isNotEmpty).join(' · ');
-    final detail = broken ? status : 'Turn ${item.turnNumber} · $status';
+    final detail = broken
+        ? (partial > 0 ? "$status · can replay $partial moves" : status)
+        : 'Turn ${item.turnNumber} · $status';
     return ListTile(
       key: ValueKey('save-${item.id}'),
       enabled: tappable,
@@ -203,17 +254,30 @@ class _SavedGamesScreenState extends State<SavedGamesScreen> {
         style: broken ? TextStyle(color: theme.colorScheme.error) : null,
       ),
       isThreeLine: lines.isNotEmpty,
-      onTap: tappable ? () => _open(item) : null,
+      onTap: !tappable
+          ? null
+          : finished
+              ? () => _replay(item)
+              : () => _open(item),
       trailing: PopupMenuButton<String>(
         key: ValueKey('save-menu-${item.id}'),
         onSelected: (choice) {
-          if (choice == 'rename') {
-            _rename(item);
-          } else {
-            _delete(item);
+          switch (choice) {
+            case 'replay':
+              _replay(item);
+            case 'rename':
+              _rename(item);
+            default:
+              _delete(item);
           }
         },
         itemBuilder: (_) => [
+          if (_canReplay(item))
+            PopupMenuItem(
+              key: ValueKey('save-replay-${item.id}'),
+              value: 'replay',
+              child: Text(partial > 0 ? 'Replay (partial)' : 'Replay'),
+            ),
           if (!broken)
             const PopupMenuItem(
               value: 'rename',

@@ -51,7 +51,9 @@ class GameController extends ChangeNotifier {
     SaveWriteQueue? saves,
     DateTime Function()? wallClock,
     GameSave? resumeFrom,
+    bool replay = false,
   })  : _setup = setup ?? MatchSetup.hotSeat(rules: rules),
+        _replay = replay,
         _now = now ?? _stopwatchClock(),
         _ai = aiDriver ?? AiTurnDriver(),
         _saves = saves,
@@ -73,6 +75,14 @@ class GameController extends ChangeNotifier {
 
   MatchSetup _setup;
   final double Function() _now;
+
+  /// A replay presentation model (docs/ludo-saves.md section 11): it shows
+  /// states handed to [replayShow] and [replayPlay] and takes no input. No
+  /// roll, tap, AI turn or save ever happens in it, and no AI worker starts.
+  final bool _replay;
+
+  /// Whether this controller only presents a replay.
+  bool get isReplay => _replay;
 
   // ---- Autosave (docs/ludo-saves.md) --------------------------------------
 
@@ -327,7 +337,7 @@ class GameController extends ChangeNotifier {
     _aiDueMs = null;
     // An answer for the old game must never be played in the new one.
     _ai.cancel();
-    if (_hasSearchingAi) {
+    if (_hasSearchingAi && !_replay) {
       _ai.warmUp();
     }
     _clearVariants();
@@ -391,7 +401,7 @@ class GameController extends ChangeNotifier {
 
   /// Rolls the die for the current seat.
   void roll() {
-    if (phase != GamePhase.awaitingRoll) {
+    if (_replay || phase != GamePhase.awaitingRoll) {
       return;
     }
     final result = Engine.roll(state);
@@ -418,7 +428,7 @@ class GameController extends ChangeNotifier {
   /// Quick-roll: skips a running roll to its settle (the result is the same,
   /// it only arrives sooner). Ignored outside a roll.
   void quickRoll() {
-    if (phase != GamePhase.rolling) {
+    if (_replay || phase != GamePhase.rolling) {
       return;
     }
     // The skipped bounces are not felt either; only the settle click plays.
@@ -430,6 +440,9 @@ class GameController extends ChangeNotifier {
   /// A tap on seat [seat]'s dock: rolls (or quick-rolls) when it is that
   /// seat's turn, otherwise only flashes the dock.
   void dockTap(int seat) {
+    if (_replay) {
+      return;
+    }
     if (seat == activeSeat) {
       if (phase == GamePhase.awaitingRoll) {
         if (aiTurn) {
@@ -479,7 +492,7 @@ class GameController extends ChangeNotifier {
   /// while a token is to be chosen, a tap on a token that cannot move nudges
   /// it (with a faint red ring and a double tick).
   bool tapAt(Pt grid) {
-    if (aiTurn) {
+    if (_replay || aiTurn) {
       return false;
     }
     if (phase == GamePhase.awaitingRoll) {
@@ -614,7 +627,8 @@ class GameController extends ChangeNotifier {
   /// tray. Selects it when it can be spent now, otherwise the tray shakes.
   void chipTap(int seat, int chip) {
     final c = choice;
-    if (!banked ||
+    if (_replay ||
+        !banked ||
         phase != GamePhase.awaitingMove ||
         c == null ||
         aiTurn ||
@@ -634,6 +648,7 @@ class GameController extends ChangeNotifier {
 
   /// Whether [seat]'s chips take taps now.
   bool trayTappable(int seat) =>
+      !_replay &&
       banked &&
       phase == GamePhase.awaitingMove &&
       choice != null &&
@@ -776,7 +791,7 @@ class GameController extends ChangeNotifier {
   /// the usual pause. A late, crashed or nonsensical worker means the
   /// baseline bot plays; the game never waits for the AI.
   void _driveAi(double now) {
-    if (!aiTurn) {
+    if (_replay || !aiTurn) {
       _aiDueMs = null;
       _ai.cancel();
       return;
@@ -1031,7 +1046,7 @@ class GameController extends ChangeNotifier {
     _refreshLayout();
     legal = const [];
     _activate(state.currentSeat);
-    if (banked && !state.isOver && state.awaitingMove) {
+    if (banked && !_replay && !state.isOver && state.awaitingMove) {
       // More dice to spend.
       _enterMoving();
       notifyListeners();
@@ -1051,6 +1066,79 @@ class GameController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  // ---- Replay (docs/ludo-saves.md section 11) ------------------------------
+
+  /// Shows [shown] at once, without animation: the table is reset to that
+  /// state (tokens at rest, nothing flying, the tray holding the bank of a
+  /// banked turn that is mid-spend). [rolls] maps a seat to the face of the
+  /// last die it played, for the ghost dice in the docks. A game that is
+  /// over shows its rank badges, without confetti or a haptic.
+  void replayShow(GameState shown, {Map<int, int> rolls = const {}}) {
+    assert(_replay, 'replayShow is for replay controllers');
+    state = shown;
+    _resetTable();
+    rollerSeat = shown.currentSeat;
+    for (final entry in rolls.entries) {
+      seatDice[entry.key] = _ghostDie(entry.key, entry.value);
+    }
+    if (banked && shown.bank.isNotEmpty) {
+      tray.reconcile(shown.currentSeat, shown.bank, _now());
+    }
+    if (shown.isOver) {
+      phase = GamePhase.gameOver;
+    }
+    notifyListeners();
+  }
+
+  /// Plays one decision with the normal animations: the table takes [ready]
+  /// (the state with the roll made, no animation; see `ReplayStep.ready`)
+  /// and [move] hops, captures or reaches home as it would in a live game.
+  /// A move still animating is settled first. [roller] rolled [dice].
+  /// [reverted] says that the turn was undone since the last decision
+  /// (banked dead end): the tokens are simply back, with a notice.
+  void replayPlay(
+    GameState ready,
+    Move move, {
+    required int roller,
+    required int dice,
+    bool reverted = false,
+  }) {
+    assert(_replay, 'replayPlay is for replay controllers');
+    replaySettle();
+    final now = _now();
+    if (reverted) {
+      toasts[state.currentSeat] = DockToast('Turn undone', now);
+    }
+    state = ready;
+    _activate(ready.currentSeat);
+    rollerSeat = roller;
+    lastRoll = dice;
+    seatDice[roller] = _ghostDie(roller, dice);
+    message = null;
+    _refreshLayout();
+    if (banked) {
+      tray.reconcile(roller, ready.bank, now);
+    }
+    _startMove(move);
+  }
+
+  /// Finishes a move that is still animating (its effects keep playing).
+  /// Does nothing when none is.
+  void replaySettle() {
+    if (phase == GamePhase.moving && _after != null) {
+      _finishMove();
+    }
+  }
+
+  /// Whether a replayed move is animating right now.
+  bool get replayMoving => phase == GamePhase.moving;
+
+  Dice3dTimeline _ghostDie(int seat, int face) => Dice3dTimeline(
+        value: face,
+        seed: (seat * 7919 + face * 104729) & 0x7fffffff,
+        spec: spec,
+      );
 
   /// Seat of the winning player (or team's first seat); `null` before the end.
   int? get winnerSeat {

@@ -6,18 +6,25 @@ import 'save_write_queue.dart';
 
 /// The outcome of opening one save: decoded and replayed.
 class SaveCheck {
-  const SaveCheck._(this.save, this.replay, this.problem);
+  const SaveCheck._(this.save, this.replay, this.problem, this.partialMoves);
 
   /// A save that decoded and replayed cleanly (it may be finished).
   const SaveCheck.good(GameSave save, SaveReplay replay)
-      : this._(save, replay, null);
+      : this._(save, replay, null, 0);
 
-  /// A save that cannot be opened; [problem] says why.
-  const SaveCheck.bad(String problem) : this._(null, null, problem);
+  /// A save that cannot be opened; [problem] says why. [partialMoves] is how
+  /// many decisions still replay before the engine refused one (the viewer
+  /// can play those).
+  const SaveCheck.bad(String problem, {int partialMoves = 0})
+      : this._(null, null, problem, partialMoves);
 
   final GameSave? save;
   final SaveReplay? replay;
   final String? problem;
+
+  /// For a save that cannot be opened: decisions that still replay (`0`
+  /// when none, or when the replay cannot be trusted at all).
+  final int partialMoves;
 
   bool get ok => save != null;
 
@@ -114,9 +121,15 @@ class SaveLibrary {
         check = SaveCheck.bad(decoded?.failure?.message ?? 'missing');
       } else {
         final replay = SaveReplayer.replay(save);
-        check = replay.ok
+        final failure = replay.failure;
+        check = failure == null
             ? SaveCheck.good(save, replay)
-            : SaveCheck.bad(replay.failure!.message);
+            : SaveCheck.bad(
+                failure.message,
+                partialMoves: failure.problem == ReplayProblem.entryRejected
+                    ? replay.applied
+                    : 0,
+              );
       }
     } on Object catch (e) {
       return SaveCheck.bad('$e');

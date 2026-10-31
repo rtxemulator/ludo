@@ -11,6 +11,7 @@ import 'storage/save_flush_observer.dart';
 import 'storage/sqflite_save_store.dart';
 import 'ui/home/home_screen.dart';
 import 'ui/home/saved_games_screen.dart';
+import 'ui/replay/replay_screen.dart';
 import 'ui/screens/game_screen.dart';
 import 'ui/setup/setup_screen.dart';
 
@@ -93,6 +94,7 @@ class _LudoAppState extends State<LudoApp> {
           setup: setup,
           settings: _settings,
           saves: _library.queue,
+          onReplay: _replayGameJustPlayed,
         ),
       ),
     );
@@ -106,6 +108,7 @@ class _LudoAppState extends State<LudoApp> {
           resumeFrom: save,
           settings: _settings,
           saves: _library.queue,
+          onReplay: _replayGameJustPlayed,
           // "Players & rules" in a resumed game opens the setup in its place.
           onSetup: () => unawaited(
             _navigator.currentState?.pushReplacement(_setupRoute()),
@@ -115,10 +118,41 @@ class _LudoAppState extends State<LudoApp> {
     );
   }
 
+  /// Watches [opening]; the replay never writes anything.
+  Future<void> _replay(ReplayOpening opening) async {
+    final script = opening.script;
+    if (script == null) {
+      return;
+    }
+    await _navigator.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReplayScreen(
+          script: script,
+          salvaged: opening.salvaged,
+          settings: _settings,
+        ),
+      ),
+    );
+  }
+
+  /// "Watch replay" at game over: the save is the one in memory (the game
+  /// is over, so nothing is being written to it any more).
+  void _replayGameJustPlayed(GameSave save) {
+    unawaited(_replay(ReplayOpening.of(save)));
+  }
+
   Future<void> _openSaved() async {
     await _navigator.currentState?.push(
       MaterialPageRoute<void>(
-        builder: (_) => SavedGamesScreen(library: _library, onOpen: _resume),
+        builder: (_) => SavedGamesScreen(
+          library: _library,
+          onOpen: _resume,
+          onReplay: _replay,
+          // The empty list offers a new game in its own place.
+          onNewGame: () => unawaited(
+            _navigator.currentState?.pushReplacement(_setupRoute()),
+          ),
+        ),
       ),
     );
   }

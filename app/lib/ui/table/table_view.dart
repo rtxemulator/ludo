@@ -29,6 +29,8 @@ class TableView extends StatelessWidget {
     required this.palette,
     required this.shaders,
     this.onSetup,
+    this.onReplay,
+    this.onClose,
   });
 
   final GameController game;
@@ -38,6 +40,13 @@ class TableView extends StatelessWidget {
 
   /// Opens the new-game setup; `null` hides the menu entry.
   final VoidCallback? onSetup;
+
+  /// "Watch replay" on the game-over card; `null` hides the button.
+  final VoidCallback? onReplay;
+
+  /// Closes a replay: with a replay model ([GameController.isReplay]) the
+  /// menu button becomes a close button and there is no game-over card.
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +115,7 @@ class TableView extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (game.phase == GamePhase.gameOver)
+                  if (game.phase == GamePhase.gameOver && !game.isReplay)
                     Positioned.fromRect(
                       rect: Rect.fromCenter(
                         center: Offset(
@@ -120,6 +129,7 @@ class TableView extends StatelessWidget {
                         game: game,
                         settings: settings,
                         layout: layout,
+                        onReplay: game.save == null ? null : onReplay,
                         onMenu: () => showTableMenu(
                           context,
                           game: game,
@@ -130,17 +140,22 @@ class TableView extends StatelessWidget {
                       ),
                     ),
                   _RoundButton(
-                    rect: boxRect(layout.menu),
-                    icon: Icons.menu,
-                    tooltip: 'Menu',
-                    color: palette.text,
-                    onPressed: () => showTableMenu(
-                      context,
-                      game: game,
-                      settings: settings,
-                      layout: layout,
-                      onSetup: onSetup,
+                    key: ValueKey<String>(
+                      game.isReplay ? 'replay-close' : 'table-menu',
                     ),
+                    rect: boxRect(layout.menu),
+                    icon: game.isReplay ? Icons.close : Icons.menu,
+                    tooltip: game.isReplay ? 'Close replay' : 'Menu',
+                    color: palette.text,
+                    onPressed: game.isReplay
+                        ? (onClose ?? () {})
+                        : () => showTableMenu(
+                              context,
+                              game: game,
+                              settings: settings,
+                              layout: layout,
+                              onSetup: onSetup,
+                            ),
                   ),
                   if (settings.frameOverlay)
                     const Positioned(
@@ -161,6 +176,7 @@ class TableView extends StatelessWidget {
 /// Small round icon button on the felt.
 class _RoundButton extends StatelessWidget {
   const _RoundButton({
+    super.key,
     required this.rect,
     required this.icon,
     required this.tooltip,

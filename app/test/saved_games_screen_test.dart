@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo/seats/seats.dart';
@@ -11,12 +13,16 @@ Future<void> _pump(
   WidgetTester tester,
   SaveLibrary library, {
   void Function(GameSave save)? onOpen,
+  void Function(ReplayOpening opening)? onReplay,
+  VoidCallback? onNewGame,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: SavedGamesScreen(
         library: library,
         onOpen: (save) async => onOpen?.call(save),
+        onReplay: (opening) async => onReplay?.call(opening),
+        onNewGame: onNewGame ?? () {},
       ),
     ),
   );
@@ -43,9 +49,13 @@ void main() {
     library = SaveLibrary(store);
   });
 
-  testWidgets('an empty list says so', (tester) async {
-    await _pump(tester, library);
+  testWidgets('an empty list says so and offers a new game', (tester) async {
+    var newGames = 0;
+    await _pump(tester, library, onNewGame: () => newGames++);
     expect(find.byKey(const ValueKey('saved-empty')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('saved-new-game')));
+    await tester.pumpAndSettle();
+    expect(newGames, 1);
   });
 
   testWidgets('a row shows name, date, seats, turn and state', (tester) async {
@@ -94,16 +104,94 @@ void main() {
     expect(opened?.name, 'Mine');
   });
 
-  testWidgets('a finished game is disabled and does nothing when tapped',
+  testWidgets('tapping a finished game replays it, it is not resumed',
       (tester) async {
     await store.put(playSave(id: 'done', at: day, toEnd: true, name: 'Won'));
     GameSave? opened;
-    await _pump(tester, library, onOpen: (s) => opened = s);
+    ReplayOpening? replayed;
+    await _pump(
+      tester,
+      library,
+      onOpen: (s) => opened = s,
+      onReplay: (o) => replayed = o,
+    );
     expect(find.textContaining('Finished'), findsOneWidget);
-    expect(_enabled(tester, 'done'), isFalse);
-    await tester.tap(_row('done'), warnIfMissed: false);
+    expect(_enabled(tester, 'done'), isTrue);
+    expect(find.textContaining('coming soon'), findsNothing);
+    await tester.tap(_row('done'));
     await tester.pumpAndSettle();
     expect(opened, isNull);
+    expect(replayed?.ok, isTrue);
+    expect(replayed?.script?.endsInGameOver, isTrue);
+    expect(replayed?.partial, isFalse);
+  });
+
+  testWidgets('every openable row has Replay in its menu', (tester) async {
+    await store.put(playSave(id: 'live', at: day, name: 'Live'));
+    await store.put(playSave(
+      id: 'done',
+      at: day.add(const Duration(hours: 1)),
+      toEnd: true,
+      name: 'Done',
+    ));
+    GameSave? opened;
+    final replayed = <String>[];
+    await _pump(
+      tester,
+      library,
+      onOpen: (s) => opened = s,
+      onReplay: (o) => replayed.add(o.script!.save.id),
+    );
+    await _menu(tester, 'live', 'Replay');
+    await _menu(tester, 'done', 'Replay');
+    expect(replayed, ['live', 'done']);
+    expect(opened, isNull);
+    // Replaying leaves the games as they were.
+    final rows = await store.list();
+    expect(
+      rows.map((r) => r.updatedAt).toSet(),
+      {day, day.add(const Duration(hours: 1))},
+    );
+  });
+
+  testWidgets('a damaged log is greyed but replays up to its last valid move',
+      (tester) async {
+    final save = playSave(id: 'x', at: day, decisions: 20, name: 'Cut');
+    final json = jsonDecode(SaveCodec.encode(save)) as Map<String, Object?>;
+    final text = json['log']! as String;
+    json['log'] = '${text.substring(0, 14)}zz${text.substring(16)}';
+    store.putRaw('x', jsonEncode(json), name: 'Cut', updatedAt: day);
+    ReplayOpening? replayed;
+    await _pump(tester, library, onReplay: (o) => replayed = o);
+
+    expect(_enabled(tester, 'x'), isFalse);
+    expect(find.textContaining('can replay 7 moves'), findsOneWidget);
+    await _menu(tester, 'x', 'Replay (partial)');
+    expect(replayed?.ok, isTrue);
+    expect(replayed?.salvaged, isTrue);
+    expect(replayed?.partial, isTrue);
+    expect(replayed?.playable, 7);
+  });
+
+  testWidgets('a greyed row with nothing to replay has no Replay action',
+      (tester) async {
+    store.putRaw('junk', '{{{', name: 'Junk', updatedAt: day);
+    await store.put(withBrokenCheck(playSave(
+      id: 'bad',
+      at: day.add(const Duration(hours: 1)),
+      name: 'Drifted',
+    )));
+    await _pump(tester, library);
+
+    for (final id in ['junk', 'bad']) {
+      await tester.tap(find.byKey(ValueKey('save-menu-$id')));
+      await tester.pumpAndSettle();
+      expect(find.text('Replay'), findsNothing);
+      expect(find.text('Replay (partial)'), findsNothing);
+      expect(find.text('Delete'), findsOneWidget);
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('a save that fails its replay is greyed out after the check',

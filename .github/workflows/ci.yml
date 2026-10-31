@@ -34,6 +34,13 @@ jobs:
             exit 1
           fi
 
+      - name: Storage purity (no Flutter imports, no dart:io)
+        run: |
+          if grep -rnE "package:flutter|dart:io|dart:ui" lib/storage/; then
+            echo "::error::lib/storage/ must stay pure Dart (no Flutter, dart:io or dart:ui)"
+            exit 1
+          fi
+
       - name: AI purity (no Flutter imports, no dice access)
         run: |
           if grep -rn "package:flutter" lib/ai/; then

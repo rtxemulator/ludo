@@ -15,12 +15,16 @@ class GameOverCard extends StatelessWidget {
     required this.settings,
     required this.layout,
     required this.onMenu,
+    this.onReplay,
   });
 
   final GameController game;
   final GameSettings settings;
   final TableLayout layout;
   final VoidCallback onMenu;
+
+  /// "Watch replay" of the game just played; `null` hides the button.
+  final VoidCallback? onReplay;
 
   /// Side of the square the card turns inside (pixels).
   static double sideFor(TableLayout layout) =>
@@ -63,6 +67,14 @@ class GameOverCard extends StatelessWidget {
                     child: const Text('Rematch'),
                   ),
                   const SizedBox(height: 8),
+                  if (onReplay != null) ...[
+                    OutlinedButton(
+                      key: const ValueKey('watch-replay'),
+                      onPressed: onReplay,
+                      child: const Text('Watch replay'),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   OutlinedButton(
                     onPressed: onMenu,
                     child: const Text('Menu'),

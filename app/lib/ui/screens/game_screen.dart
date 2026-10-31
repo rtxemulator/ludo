@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:ludo/seats/seats.dart';
+import 'package:ludo/storage/storage.dart';
 
 import '../../game/game_controller.dart';
 import '../../settings/game_settings.dart';
@@ -14,7 +15,16 @@ import '../theme/token_shaders.dart';
 class GameScreen extends StatefulWidget {
   /// [controller] is injectable for tests; when omitted the screen owns one,
   /// built for [setup] (four humans when that is omitted too).
-  const GameScreen({super.key, this.controller, this.settings, this.setup});
+  const GameScreen({
+    super.key,
+    this.controller,
+    this.settings,
+    this.setup,
+    this.saves,
+    this.resumeFrom,
+    this.onSetup,
+    this.onReplay,
+  });
 
   final GameController? controller;
 
@@ -24,14 +34,34 @@ class GameScreen extends StatefulWidget {
   /// Injectable for tests; when omitted the screen owns one.
   final GameSettings? settings;
 
+  /// Where the game autosaves; ignored when a [controller] is given. No
+  /// saving when omitted.
+  final SaveWriteQueue? saves;
+
+  /// Continues this save instead of starting [setup]; ignored when a
+  /// [controller] is given.
+  final GameSave? resumeFrom;
+
+  /// What "Players & rules" in the menu does. When omitted it goes back one
+  /// screen (and is hidden when there is none).
+  final VoidCallback? onSetup;
+
+  /// "Watch replay" at game over: called with the save of the game just
+  /// played (shown only when the game has one). `null` hides the button.
+  final ValueChanged<GameSave>? onReplay;
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
-  late final GameController _game =
-      widget.controller ?? GameController(setup: widget.setup);
+  late final GameController _game = widget.controller ??
+      GameController(
+        setup: widget.setup,
+        saves: widget.saves,
+        resumeFrom: widget.resumeFrom,
+      );
   late final GameSettings _settings =
       widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
   bool _systemReduced = false;
@@ -109,10 +139,19 @@ class _GameScreenState extends State<GameScreen>
           settings: _settings,
           palette: palette,
           shaders: _shaders!,
+          onReplay: widget.onReplay == null
+              ? null
+              : () {
+                  final save = _game.save;
+                  if (save != null) {
+                    widget.onReplay!(save);
+                  }
+                },
           // Back to the setup screen, when this screen was opened from it.
-          onSetup: Navigator.of(context).canPop()
-              ? () => Navigator.of(context).pop()
-              : null,
+          onSetup: widget.onSetup ??
+              (Navigator.of(context).canPop()
+                  ? () => Navigator.of(context).pop()
+                  : null),
         ),
       ),
     );

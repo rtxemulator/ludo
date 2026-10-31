@@ -23,7 +23,7 @@ Related: [ludo-seats.md](ludo-seats.md), [ludo-rules.md](ludo-rules.md), [ludo-e
 - **Flutter + Dart:** Android first (minSdk 24) with the Impeller rendering backend.
 - **Visuals:** Board and tokens drawn procedurally with `CustomPainter`, no raster image assets. Tokens are animated widgets using only transform and opacity.
 - **State Management:** Riverpod, or plain `ChangeNotifier` to maintain low overhead.
-- **Storage:** `drift` (SQLite) for games and replay logs; `shared_preferences` for settings.
+- **Storage:** `sqflite` (SQLite) for games and replay logs (decided in Milestone 5, replaces `drift`; see [[ludo-saves]]); `shared_preferences` for settings.
 - **Audio:** `flutter_soloud` (low-latency C++ backend), Opus audio files.
 - **P2P Multiplayer:** `flutter_webrtc` with manual QR/short-code signaling. Offline local play via Google Nearby Connections plugin.
 - **Build & Optimization:** R8 code shrinking, `--split-per-abi` or AAB bundle, baseline profiles for fast cold start.
@@ -43,7 +43,7 @@ lib/
     dice.dart           # Seeded PRNG and commit-reveal helper
   ai/         # Runs entirely in a background isolate
   seats/      # PURE Dart: SeatConfig, MatchSetup, presets, GreedyBot (see ludo-seats.md)
-  storage/    # drift database, save/load, move log serialization
+  storage/    # pure Dart save model, codec, replayer (see docs/ludo-saves.md); the sqflite store lives in app/
   net/        # WebRTC + Nearby Connections message protocols
   ui/         # Screens, CustomPainter board, token animations
   audio/      # Sound effects and ambient music players

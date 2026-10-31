@@ -26,7 +26,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
    - Automated self-play tournament regression tests.
    - Design and engine API check: `ludo-ai.md` (chats A/B/C; Expert is iterative-deepening expectimax, no MCTS).
 5. **Milestone 5 - Saves & Replays:**
-   - Design: [[ludo-saves]] (save model, JSON schema, resume semantics, failure handling). Chat A: doc + pure-Dart `lib/storage/`; chat B: `sqflite` store (replaces `drift`), `shared_preferences`, autosave, resume, minimal Home; chat C: replay viewer + polish, PR after device review.
+   - Design: [[ludo-saves]] (save model, JSON schema, resume semantics, failure handling). Chat A: doc + pure-Dart `lib/storage/`; chat B: `sqflite` store (replaces `drift`), `shared_preferences`, autosave, resume, minimal Home; chat C: replay viewer + polish (done, section 11 of ludo-saves.md). **Status: M5 done, pending device review** (checklist in ludo-saves.md section 12); the PR to main is opened after it.
    - Autosave after each decision, continue-last-game shortcut, and deterministic game replays from seed + move log.
 6. **Milestone 6 - Sound, Polish & Themes:**
    - `flutter_soloud` Opus audio engine integration.

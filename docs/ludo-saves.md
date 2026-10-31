@@ -137,4 +137,64 @@ Cloud sync, export/import of saves, multiple saves per game (branching), and sav
 
 - **Chat A (this one):** this doc, `lib/storage/`, `test/storage/`.
 - **Chat B:** `sqflite` store implementing `SaveStore` (one table: `id` primary key, `name`, `created_at`, `updated_at`, `finished`, `schema_version`, `json`), `shared_preferences` for settings, autosave in `GameController` (hook in `_startMove`; the controller needs the seed, the log and the current `GameSave`; `newGame` resets them), `GameController.resume(save)`, a minimal Home with Continue and Saved Games (rename, delete, greyed rows), lazy verification, widget tests, CI green.
-- **Chat C:** replay viewer on `SaveReplayer.timeline` (scrubber, play/pause, speed, partial replay of damaged saves), polish, then the PR after the on-device review.
+- **Chat C (done):** replay viewer, polish and tests, section 11. The PR is opened only after the on-device review (section 12).
+
+## 11. Replay viewer (chat C)
+
+Any save that opens can be watched, finished or in progress. A replay never writes: it has no `SaveWriteQueue`, `GameController.save` stays `null`, and the only store call it makes is the one read that opens it.
+
+### Data
+
+- `ReplayScript.of(save)` (`lib/storage/replay_script.dart`, pure Dart) is built on `SaveReplayer.timeline` and adds, for each decision `k` (1-based): `before` (the state after decision `k-1`), `ready` (`before` with the roll made, a die pending or, banked, the bank to spend), `move`, `after` (`== states[k]`) and the log `entry`. `ready` is `Engine.nextDecision(before)` unless `before` already awaits a move (banked, mid-spend). The move is found exactly like `Engine.applyEntry` does, and a step is accepted only if `Engine.apply(ready, move)` has the same fingerprint as `states[k]`; otherwise the script stops before it.
+- `ReplayOpening` is the result of opening a save: `script`, `salvaged` (damaged file, readable start only), `partial` (the replay stops before the game did), or a refusal with a reason. `SaveLibrary.openReplay(item)` flushes the write queue, reads the stored row once and returns it; `ReplayOpening.of(save)` does the same for a save already in memory (game over).
+- What can be replayed: a save that decodes and replays; a save whose log has an entry the engine refuses (plays up to the last valid entry, says so); a damaged log with a salvage (plays the readable start, says so). Refused, with no Replay action: unreadable rows, newer schemas, an engine drift (`checksumMismatch`, "incompatible": the replay would show another game), and anything with no decision to play. Rows that are greyed "Can't open" but have a partial replay (a salvage or a replay that stops at move k) stay greyed for resuming and offer "Replay (partial)" in their menu with "can replay k moves" in the subtitle.
+
+### Presentation model
+
+`GameController(setup: save.setup, seed: save.seed, replay: true, now: scaledClock)` is the table the screen paints, with no `saves`. It is not built with `resumeFrom` because `resume` refuses a finished game and a partial one; the replay loads states through two methods instead:
+
+- `replayShow(state, rolls:)` shows a state at once (reset table, tray rebuilt from `state.bank`, ghost dice from `rolls`, game over without confetti or haptic).
+- `replayPlay(ready, move, roller:, dice:, reverted:)` loads `ready` without animation and runs `_startMove(move)`: the normal hop, capture, home and tray-chip animations. A move that is still hopping is settled first.
+
+In replay mode `roll`, `quickRoll`, `dockTap`, `tapAt`, `chipTap`, `trayTappable` and `_driveAi` do nothing, no AI worker is warmed up, and `_enterMoving` is never called (no choice, no forced spend).
+
+### Controller and screen
+
+- `ReplayController` (`app/lib/game/replay_controller.dart`): `position` (`0..N`, "after decision k"), `play/pause`, `speed` (1x, 2x, 4x), `stepForward` (animated), `stepBack`, `toStart`, `toEnd`, `seek` (all three show the state at once), `tick`. Every manual control pauses playback. Playing waits for the hop to end, then `gapMs` (450 ms) of the scaled clock, then the next decision; after the last one it pauses by itself. Play at the end starts over.
+- Speed is a `ScaledClock` (`lib/ui/core/scaled_clock.dart`) handed to the table as its clock, so hops, rings and chips all follow it, and a speed change never makes time jump.
+- `ReplayScreen`: the normal `TableView` (orientation, reduce motion and haptics settings apply; the menu button becomes a close button; no game-over card) above `ReplayControls`: what happened (`Red rolled 4 · moved token 2`, or `moved Yellow's token 2` under teammate control, `blockade of tokens 1 and 2` for a unit move), `Move k of N · Turn t`, the scrubber, jump/step/play buttons and the speed button. A notice line says "Damaged save: replaying the first k moves." or "This replay stops after move k". Leaving the screen disposes the ticker and the controller.
+- Not shown, by design: rolls that passed (no legal move, three sixes) and banked dice rolled before a spend are not in the log. The viewer starts each decision at its `ready` state. When banked rolls reverted a turn between two decisions (a dead end) the tokens are simply back, with a "Turn undone" notice, not animated.
+
+### Entry points
+
+- Saved Games: tapping a finished row replays it, tapping an unfinished row resumes it, every openable row has "Replay" in its menu. The empty state has a "New game" button.
+- Game over: "Watch replay" next to Rematch and Menu, shown when the game has a save. It opens the save held in memory by the controller (`GameController.save`, the same object the queue wrote), so it never reads the store.
+
+### Replay and the autosave of the active game
+
+A replay cannot start while its save is being written, today:
+
+1. Saved Games is only reachable from Home, and a game is a route pushed over Home or Saved Games, so a running game and the list are never interactive together.
+2. The game-over replay uses the in-memory save of a game that is over (no further decision, no further write).
+3. `SaveLibrary.openReplay` (like `verify`) waits for the write queue before it reads, and a write replaces the whole row (`put` carries the full log), so a read sees either the old or the new log, never half of one. When online play or a second surface arrives (Milestone 8) this guarantee has to be kept or the replay has to read from memory.
+
+### Tests
+
+`test/storage/replay_script_test.dart` (every setup of the property matrix: step fields, fingerprints, shorter scripts for bad logs, `openReplay` for whole, salvaged, drifted, too-new and missing rows, waiting for queued writes), `test/ui/scaled_clock_test.dart`, and in the app `replay_controller_test.dart` (forward/back/scrub for plain, banked mid-spend, team with teammate control and finished games; speed and auto-pause; no store writes; disposal; property: forward then back equals `SaveReplayer.timeline` for five setups), `replay_screen_test.dart` (controls, notices, no input, disposal without timers, game-over "Watch replay", app wiring) and the extended `saved_games_screen_test.dart`.
+
+## 12. What shipped, and the device checklist
+
+Shipped in Milestone 5: `lib/storage/` (model, codec, replayer, script, library, write queue), the sqflite store, autosave in `GameController`, resume, Home, Saved Games (rename, delete, greyed rows, lazy verification, empty state), persisted settings, the replay viewer. Not shipped (section 9a): export/import, branching, online saves, undo.
+
+Device review (all on the phone, release or profile APK from CI):
+
+1. Replay of a finished game: tap it in Saved Games, play, auto-pause at the end, play again restarts.
+2. Replay of an in-progress game: Replay from the row menu; the game can still be resumed afterwards and continues from the same place.
+3. Scrub and speed: drag the slider (no hops, tokens jump), switch 1x/2x/4x while playing (no jump in the animation).
+4. Banked mid-spend replay: a banked game replayed over a turn with several dice (chips in the tray shrink as they are spent, no move choice appears).
+5. Teammate-control game: the finished player's roll moves the partner's token and the text says so.
+6. Salvage replay: a save with a damaged log (planted by editing the stored row) offers "Replay (partial)", says how many moves it plays and stops there.
+7. Leave mid-replay (close button, system back) and return to Home: no crash, no stuck ticker (the table is gone, battery calm).
+8. Memory and frame timing during a long replay (frame overlay in Settings, profile APK): paint stays under 4 ms, particles at most 60.
+9. After any number of replays: no new save in the list, no changed date or name, "Continue last game" still points at the same game.
+

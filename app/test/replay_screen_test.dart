@@ -89,7 +89,7 @@ void main() {
     expect(_enabled(tester, 'replay-forward'), isTrue);
 
     await tester.tap(_key('replay-forward'));
-    await _frames(tester, 1);
+    await _frames(tester, clock, 1);
     final first = replay.script.step(1);
     expect(_text(tester, 'replay-position'), startsWith('Move 1 of 20'));
     expect(
@@ -98,7 +98,7 @@ void main() {
     );
     expect(_text(tester, 'replay-step-text'), contains('rolled ${first.dice}'));
     expect(_enabled(tester, 'replay-back'), isTrue);
-    await _frames(tester, 20); // let the hop finish
+    await _frames(tester, clock, 20); // let the hop finish
 
     await tester.tap(_key('replay-back'));
     await tester.pump();
@@ -139,7 +139,7 @@ void main() {
     await _pumpReplay(tester, replay);
 
     await tester.tap(_key('replay-play'));
-    await _frames(tester, 1);
+    await _frames(tester, clock, 1);
     expect(replay.playing, isTrue);
     expect(find.byIcon(Icons.pause), findsOneWidget);
 
@@ -149,7 +149,7 @@ void main() {
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
 
     await tester.tap(_key('replay-play'));
-    await _frames(tester, 200);
+    await _frames(tester, clock, 200);
     expect(replay.position, 6);
     expect(replay.playing, isFalse);
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
@@ -181,7 +181,7 @@ void main() {
     await tester.tap(_key('dock-0'));
     await tester.pump();
     await tester.tapAt(tester.getCenter(find.byType(Scaffold)));
-    await _frames(tester, 20);
+    await _frames(tester, clock, 20);
     expect(replay.game.state, before);
     expect(replay.game.phase, GamePhase.awaitingRoll);
     expect(replay.game.dice, isNull);
@@ -214,7 +214,7 @@ void main() {
     await _pumpReplay(tester, replay);
     await tester.tap(_key('replay-speed'));
     await tester.tap(_key('replay-play'));
-    await _frames(tester, 6);
+    await _frames(tester, clock, 6);
     expect(replay.game.replayMoving || replay.position > 0, isTrue);
 
     await tester.pumpWidget(const SizedBox());

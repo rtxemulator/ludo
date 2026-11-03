@@ -3,6 +3,7 @@ import 'package:ludo/ui/core/table_layout.dart';
 
 import '../../game/game_controller.dart';
 import '../../settings/game_settings.dart';
+import '../settings/settings_panel.dart';
 import 'turned_box.dart';
 
 enum _Page { main, settings, rules }
@@ -181,79 +182,10 @@ class _TableMenuState extends State<TableMenu> {
   }
 
   Widget _settingsPage(BuildContext context) {
-    final s = _settings;
-    final tableMode = s.orientation == UiOrientation.table;
     return Column(
       children: [
         _header('Settings'),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 8),
-            children: [
-              SwitchListTile(
-                title: const Text('Haptics'),
-                value: s.haptics,
-                onChanged: (v) => s.haptics = v,
-              ),
-              ListTile(
-                title: const Text('Reduce motion'),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SegmentedButton<ReduceMotion>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: ReduceMotion.system,
-                        label: Text('System'),
-                      ),
-                      ButtonSegment(value: ReduceMotion.on, label: Text('On')),
-                      ButtonSegment(
-                        value: ReduceMotion.off,
-                        label: Text('Off'),
-                      ),
-                    ],
-                    selected: {s.reduceMotion},
-                    onSelectionChanged: (v) => s.reduceMotion = v.first,
-                  ),
-                ),
-              ),
-              ListTile(
-                title: const Text('UI orientation'),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SegmentedButton<UiOrientation>(
-                    showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(
-                        value: UiOrientation.table,
-                        label: Text('Table'),
-                      ),
-                      ButtonSegment(
-                        value: UiOrientation.fixed,
-                        label: Text('Fixed'),
-                      ),
-                    ],
-                    selected: {s.orientation},
-                    onSelectionChanged: (v) => s.orientation = v.first,
-                  ),
-                ),
-              ),
-              SwitchListTile(
-                title: const Text('Auto-rotate menu to active seat'),
-                subtitle:
-                    tableMode ? null : const Text('Table orientation only'),
-                value: s.autoRotateShared,
-                onChanged: tableMode ? (v) => s.autoRotateShared = v : null,
-              ),
-              SwitchListTile(
-                title: const Text('Frame timing overlay'),
-                subtitle: const Text('fps, dropped frames, paint time'),
-                value: s.frameOverlay,
-                onChanged: (v) => s.frameOverlay = v,
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: SettingsPanel(settings: _settings)),
       ],
     );
   }

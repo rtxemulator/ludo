@@ -8,6 +8,7 @@ import 'package:ludo_app/ui/dev/frame_timing_overlay.dart';
 import 'package:ludo_app/ui/board/board_view.dart';
 import 'package:ludo_app/ui/dice/dock_layer.dart';
 import 'package:ludo_app/ui/screens/game_screen.dart';
+import 'package:ludo_app/ui/settings/settings_panel.dart';
 
 // The turn ticker never lets the tree settle, so tests advance time by hand:
 // one frame to start an animation, one long frame to finish it.
@@ -83,6 +84,7 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await advance(tester);
+    expect(find.byType(SettingsPanel), findsOneWidget);
     expect(find.text('UI orientation'), findsOneWidget);
 
     await tester.tap(find.text('Fixed'));

@@ -13,6 +13,7 @@ import 'ui/home/home_screen.dart';
 import 'ui/home/saved_games_screen.dart';
 import 'ui/replay/replay_screen.dart';
 import 'ui/screens/game_screen.dart';
+import 'ui/settings/settings_screen.dart';
 import 'ui/setup/setup_screen.dart';
 
 Future<void> main() async {
@@ -157,6 +158,14 @@ class _LudoAppState extends State<LudoApp> {
     );
   }
 
+  Future<void> _openSettings() async {
+    await _navigator.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(settings: _settings),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SaveFlushObserver(
@@ -172,6 +181,7 @@ class _LudoAppState extends State<LudoApp> {
           onPlay: _openSetup,
           onContinue: _resume,
           onSavedGames: _openSaved,
+          onSettings: _openSettings,
         ),
       ),
     );

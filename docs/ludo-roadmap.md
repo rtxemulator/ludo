@@ -31,6 +31,7 @@ Each milestone ends with passing automated tests, manual verification, and a Git
 6. **Milestone 6 - Sound, Polish & Themes:**
    - `flutter_soloud` Opus audio engine integration.
    - Light haptic feedback, 2-3 cohesive palettes, dark mode, and settings screen.
+   - Design: [[ludo-sound-themes]] (sounds synthesized by a committed script into Ogg Opus <= 600 KB, music on table and replay only, Classic / Slate / High Contrast palettes with System / Light / Dark, one shared settings panel). Chat A (foundations: settings model, shared panel and Settings screen, Rules item removed, pure-Dart `sfx.dart`) done; chat B: audio assets, `flutter_soloud`, hooks, music; chat C: palettes, theme mode, polish, device review, PR. **Status: chat A done on branch `milestone-6-sound-themes`.**
 7. **Milestone 7 - Performance Audit:**
    - Profile mode execution on target Android hardware.
    - Startup trace verification (<600 ms cold start).

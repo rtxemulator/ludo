@@ -22,6 +22,12 @@ void main() {
     expect(settings.orientation, UiOrientation.table);
     expect(settings.autoRotateShared, isTrue);
     expect(settings.frameOverlay, isFalse);
+    expect(settings.sfxEnabled, isTrue);
+    expect(settings.sfxVolume, 0.8);
+    expect(settings.musicEnabled, isFalse);
+    expect(settings.musicVolume, 0.4);
+    expect(settings.themeMode, ThemeMode.system);
+    expect(settings.paletteId, PaletteId.classic);
     expect(store.loadSetup(), MatchSetup.hotSeat());
   });
 
@@ -33,6 +39,12 @@ void main() {
       orientation: UiOrientation.fixed,
       autoRotateShared: false,
       frameOverlay: true,
+      sfxEnabled: false,
+      sfxVolume: 0.25,
+      musicEnabled: true,
+      musicVolume: 0.9,
+      themeMode: ThemeMode.dark,
+      paletteId: PaletteId.highContrast,
     );
     await store.saveSettings(settings);
 
@@ -43,6 +55,24 @@ void main() {
     expect(loaded.orientation, UiOrientation.fixed);
     expect(loaded.autoRotateShared, isFalse);
     expect(loaded.frameOverlay, isTrue);
+    expect(loaded.sfxEnabled, isFalse);
+    expect(loaded.sfxVolume, 0.25);
+    expect(loaded.musicEnabled, isTrue);
+    expect(loaded.musicVolume, 0.9);
+    expect(loaded.themeMode, ThemeMode.dark);
+    expect(loaded.paletteId, PaletteId.highContrast);
+  });
+
+  test('every theme mode and palette round trips', () async {
+    for (final mode in ThemeMode.values) {
+      for (final id in PaletteId.values) {
+        final store = await _open({});
+        await store.saveSettings(GameSettings(themeMode: mode, paletteId: id));
+        final loaded = store.loadSettings();
+        expect(loaded.themeMode, mode);
+        expect(loaded.paletteId, id);
+      }
+    }
   });
 
   test('a bound settings object is saved after every change', () async {
@@ -51,11 +81,15 @@ void main() {
     final stop = store.bind(settings);
     settings.haptics = false;
     settings.reduceMotion = ReduceMotion.off;
+    settings.sfxVolume = 0.3;
+    settings.paletteId = PaletteId.slate;
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     final loaded = store.loadSettings();
     expect(loaded.haptics, isFalse);
     expect(loaded.reduceMotion, ReduceMotion.off);
+    expect(loaded.sfxVolume, 0.3);
+    expect(loaded.paletteId, PaletteId.slate);
 
     stop();
     settings.haptics = true;
@@ -76,6 +110,78 @@ void main() {
     expect(settings.orientation, UiOrientation.table);
     expect(settings.autoRotateShared, isFalse); // the good one is kept
     expect(settings.frameOverlay, isFalse);
+  });
+
+  test('bad sound and look values fall back one by one', () async {
+    final cases = <String, Object>{
+      SettingsStore.sfxEnabledKey: 'on',
+      SettingsStore.sfxVolumeKey: 'loud',
+      SettingsStore.musicEnabledKey: 1,
+      SettingsStore.musicVolumeKey: true,
+      SettingsStore.themeModeKey: 'sepia',
+      SettingsStore.paletteIdKey: 42,
+    };
+    final store = await _open(cases);
+    final settings = store.loadSettings();
+    expect(settings.sfxEnabled, isTrue);
+    expect(settings.sfxVolume, 0.8);
+    expect(settings.musicEnabled, isFalse);
+    expect(settings.musicVolume, 0.4);
+    expect(settings.themeMode, ThemeMode.system);
+    expect(settings.paletteId, PaletteId.classic);
+
+    // One bad value does not spoil its neighbours.
+    final mixed = await _open({
+      SettingsStore.sfxVolumeKey: 0.5,
+      SettingsStore.musicVolumeKey: 'x',
+      SettingsStore.themeModeKey: 'light',
+      SettingsStore.paletteIdKey: 'plaid',
+    });
+    final m = mixed.loadSettings();
+    expect(m.sfxVolume, 0.5);
+    expect(m.musicVolume, 0.4);
+    expect(m.themeMode, ThemeMode.light);
+    expect(m.paletteId, PaletteId.classic);
+  });
+
+  test('an out of range volume is clamped, an int is accepted', () async {
+    final store = await _open({
+      SettingsStore.sfxVolumeKey: 3.5,
+      SettingsStore.musicVolumeKey: -2,
+    });
+    final settings = store.loadSettings();
+    expect(settings.sfxVolume, 1.0);
+    expect(settings.musicVolume, 0.0);
+
+    final whole = await _open({SettingsStore.sfxVolumeKey: 1});
+    expect(whole.loadSettings().sfxVolume, 1.0);
+  });
+
+  test('not finite volumes fall back to the default', () async {
+    final store = await _open({
+      SettingsStore.sfxVolumeKey: double.nan,
+      SettingsStore.musicVolumeKey: double.infinity,
+    });
+    final settings = store.loadSettings();
+    expect(settings.sfxVolume, 0.8);
+    expect(settings.musicVolume, 0.4);
+  });
+
+  test('the volume setters clamp and ignore NaN', () {
+    final settings = GameSettings();
+    var notified = 0;
+    settings.addListener(() => notified++);
+    settings.sfxVolume = 2;
+    expect(settings.sfxVolume, 1.0);
+    settings.sfxVolume = -1;
+    expect(settings.sfxVolume, 0.0);
+    settings.sfxVolume = double.nan;
+    expect(settings.sfxVolume, 0.0);
+    settings.musicVolume = 0.4; // unchanged: no notification
+    expect(notified, 2);
+    settings.musicVolume = 0.55;
+    expect(settings.musicVolume, 0.55);
+    expect(notified, 3);
   });
 
   test('the last setup round trips', () async {

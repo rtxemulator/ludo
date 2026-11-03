@@ -68,6 +68,45 @@ void main() {
     game.dispose();
   });
 
+  testWidgets('the menu has New game, Players & rules, Settings and Close only',
+      (tester) async {
+    final game = GameController(seed: 3, haptics: false);
+    final settings = GameSettings(haptics: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameScreen(
+          controller: game,
+          settings: settings,
+          onSetup: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.menu));
+    await advance(tester);
+    for (final entry in ['New game', 'Players & rules', 'Settings', 'Close']) {
+      expect(find.text(entry), findsOneWidget, reason: entry);
+    }
+    expect(find.text('Rules'), findsNothing);
+    expect(find.byIcon(Icons.menu_book), findsNothing);
+    expect(find.text('Banked rolls'), findsNothing);
+
+    await tester.tap(find.text('Close'));
+    await advance(tester);
+    game.feedback.enabled = false;
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    game.dispose();
+  });
+
+  test('banked rolls are still switched through the controller', () {
+    final game = GameController(seed: 3, haptics: false);
+    expect(game.banked, isFalse);
+    game.setBankedRolls(true);
+    expect(game.banked, isTrue);
+    game.dispose();
+  });
+
   testWidgets('menu opens, shows its entries and settings change the model',
       (tester) async {
     final game = GameController(seed: 3, haptics: false);
@@ -80,7 +119,7 @@ void main() {
     await advance(tester);
     expect(find.text('New game'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Rules'), findsOneWidget);
+    expect(find.text('Rules'), findsNothing);
 
     await tester.tap(find.text('Settings'));
     await advance(tester);

@@ -6,9 +6,9 @@ import '../../settings/game_settings.dart';
 import '../settings/settings_panel.dart';
 import 'turned_box.dart';
 
-enum _Page { main, settings, rules }
+enum _Page { main, settings }
 
-/// Opens the menu sheet: New game, Settings, Rules (placeholder) and Close.
+/// Opens the menu sheet: New game, Players & rules, Settings and Close.
 ///
 /// The card faces the seat on turn (UI/UX doc section 3): it turns with the
 /// active seat when the orientation is `Table` and auto-rotate is on.
@@ -84,7 +84,6 @@ class _TableMenuState extends State<TableMenu> {
               child: switch (_page) {
                 _Page.main => _main(context),
                 _Page.settings => _settingsPage(context),
-                _Page.rules => _rules(context),
               },
             ),
           );
@@ -127,11 +126,6 @@ class _TableMenuState extends State<TableMenu> {
           onTap: () => setState(() => _page = _Page.settings),
         ),
         ListTile(
-          leading: const Icon(Icons.menu_book),
-          title: const Text('Rules'),
-          onTap: () => setState(() => _page = _Page.rules),
-        ),
-        ListTile(
           leading: const Icon(Icons.close),
           title: const Text('Close'),
           onTap: () => Navigator.of(context).pop(),
@@ -156,28 +150,6 @@ class _TableMenuState extends State<TableMenu> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _rules(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _header('Rules'),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
-          child: Text('The rule presets and house rules will be listed here.'),
-        ),
-        SwitchListTile(
-          title: const Text('Banked rolls'),
-          subtitle: const Text(
-            'Sixes stack: roll them all, then spend the whole bank. '
-            'Changing this starts a new game.',
-          ),
-          value: _game.banked,
-          onChanged: _game.setBankedRolls,
-        ),
-      ],
     );
   }
 

@@ -46,6 +46,27 @@ SfxEvent sfxFor(HapticEvent event) => switch (event) {
       HapticEvent.select => SfxEvent.select,
     };
 
+/// Folder of the audio assets inside the app package (`app/`). The generator
+/// in `tool/audio/` writes them and `app/pubspec.yaml` registers the folder.
+const String audioAssetDir = 'assets/audio';
+
+/// File name of the Ogg Opus effect for [event] (inside [audioAssetDir]).
+String sfxAssetFile(SfxEvent event) => '${event.name}.opus';
+
+/// File name of the ambient music loop (inside [audioAssetDir]).
+const String musicAssetFile = 'music.opus';
+
+/// Music plays about 6 dB below the effects at the same slider value (the
+/// loop is normalised to the same loudness as an effect, so this one factor
+/// is the whole difference).
+const double musicGainBelowEffects = 0.5;
+
+/// Moments (ms after a move starts) at which the hop sound plays: one per
+/// hop step, at take-off. `steps` is the number of hops of the mover and
+/// `stepMs` the length of one.
+List<double> hopSoundTimesMs({required int steps, required double stepMs}) =>
+    [for (var i = 0; i < steps; i++) i * stepMs];
+
 /// Minimum time between two plays of the same event (ms).
 const Map<SfxEvent, double> sfxMinGapMs = {
   SfxEvent.diceRoll: 300,
@@ -139,6 +160,9 @@ class SfxPlayer {
   final Map<SfxEvent, double> _last = {};
   double _volume = 1;
 
+  // Bumped by [cancelPending]: a delayed cue from an older epoch is dropped.
+  int _epoch = 0;
+
   /// Global toggle; checked again when a delayed cue fires.
   bool enabled = true;
 
@@ -158,9 +182,18 @@ class SfxPlayer {
     if (delay <= 0) {
       _fire(event);
     } else {
-      schedule(delay, () => _fire(event));
+      final epoch = _epoch;
+      schedule(delay, () {
+        if (epoch == _epoch) {
+          _fire(event);
+        }
+      });
     }
   }
+
+  /// Drops the cues that are waiting for their delay (a scrub or a pause: a
+  /// sound must not fire after the moment it belonged to).
+  void cancelPending() => _epoch++;
 
   void _fire(SfxEvent event) {
     if (!enabled || _volume <= 0) {

@@ -80,6 +80,52 @@ void main() {
     });
   });
 
+  group('assets and the hop', () {
+    test('every event has its own Ogg Opus file name', () {
+      final names = SfxEvent.values.map(sfxAssetFile).toList();
+      expect(names.toSet(), hasLength(SfxEvent.values.length));
+      for (final n in names) {
+        expect(n, endsWith('.opus'));
+      }
+      expect(names, isNot(contains(musicAssetFile)));
+      expect(sfxAssetFile(SfxEvent.diceRoll), 'diceRoll.opus');
+    });
+
+    test('music plays 6 dB below the effects', () {
+      expect(musicGainBelowEffects, closeTo(0.5, 0.01));
+    });
+
+    test('one hop sound per step, at take-off', () {
+      expect(hopSoundTimesMs(steps: 1, stepMs: 220), [0]);
+      expect(hopSoundTimesMs(steps: 4, stepMs: 130), [0, 130, 260, 390]);
+      expect(hopSoundTimesMs(steps: 0, stepMs: 130), isEmpty);
+    });
+
+    test('hop steps are further apart than the hop rate limit', () {
+      expect(130, greaterThan(sfxMinGapMs[SfxEvent.hop]!));
+    });
+  });
+
+  group('cancelPending', () {
+    test('drops a delayed cue that has not fired yet', () {
+      final rig = _Rig();
+      rig.player.play(SfxEvent.six);
+      rig.player.cancelPending();
+      rig.advance(500);
+      expect(rig.cues, isEmpty);
+    });
+
+    test('later cues play normally, and immediate cues are unaffected', () {
+      final rig = _Rig();
+      rig.player.play(SfxEvent.six);
+      rig.player.cancelPending();
+      rig.player.play(SfxEvent.six); // a new one after the cancel
+      rig.player.play(SfxEvent.land);
+      rig.advance(100);
+      expect(rig.cues.map((c) => c.event), [SfxEvent.land, SfxEvent.six]);
+    });
+  });
+
   group('clampVolume', () {
     test('keeps 0..1, clamps the rest, NaN is silent', () {
       expect(clampVolume(0.5), 0.5);

@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/storage/storage.dart';
 
+import '../../audio/audio_service.dart';
 import '../../game/game_controller.dart';
 import '../../settings/game_settings.dart';
 import '../table/table_view.dart';
@@ -19,6 +20,7 @@ class GameScreen extends StatefulWidget {
     super.key,
     this.controller,
     this.settings,
+    this.audio,
     this.setup,
     this.saves,
     this.resumeFrom,
@@ -33,6 +35,10 @@ class GameScreen extends StatefulWidget {
 
   /// Injectable for tests; when omitted the screen owns one.
   final GameSettings? settings;
+
+  /// App-wide sound: effects through the controller, music while this
+  /// screen is up. Silent when omitted (tests).
+  final AudioService? audio;
 
   /// Where the game autosaves; ignored when a [controller] is given. No
   /// saving when omitted.
@@ -61,6 +67,7 @@ class _GameScreenState extends State<GameScreen>
         setup: widget.setup,
         saves: widget.saves,
         resumeFrom: widget.resumeFrom,
+        audio: widget.audio,
       );
   late final GameSettings _settings =
       widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
@@ -68,6 +75,7 @@ class _GameScreenState extends State<GameScreen>
   late final Ticker _ticker;
   Brightness? _shaderBrightness;
   TokenShaders? _shaders;
+  VoidCallback? _unbindAudio;
 
   @override
   void initState() {
@@ -78,6 +86,9 @@ class _GameScreenState extends State<GameScreen>
     _game.feedback.enabled = _settings.haptics;
     _game.addListener(_syncTicker);
     _settings.addListener(_onSettings);
+    // Sound settings apply live; the music plays while this screen is up.
+    _unbindAudio = widget.audio?.bind(_settings);
+    widget.audio?.enterMusicScreen();
     _syncTicker();
   }
 
@@ -107,6 +118,8 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
+    _unbindAudio?.call();
+    widget.audio?.leaveMusicScreen();
     _game.removeListener(_syncTicker);
     _settings.removeListener(_onSettings);
     _ticker.dispose();

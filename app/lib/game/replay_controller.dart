@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:ludo/storage/storage.dart';
 import 'package:ludo/ui/core/scaled_clock.dart';
 
+import '../audio/audio_service.dart';
 import '../haptics/haptics_service.dart';
 import 'game_controller.dart';
 
@@ -19,11 +20,13 @@ class ReplayController extends ChangeNotifier {
     double Function()? clock,
     bool haptics = true,
     HapticsService? hapticsService,
+    AudioService? audio,
   }) : this._(
           script,
           ScaledClock(clock ?? _stopwatch()),
           haptics,
           hapticsService,
+          audio,
         );
 
   ReplayController._(
@@ -31,6 +34,7 @@ class ReplayController extends ChangeNotifier {
     ScaledClock clock,
     bool haptics,
     HapticsService? hapticsService,
+    AudioService? audio,
   )   : _clock = clock,
         game = GameController(
           setup: script.save.setup,
@@ -38,9 +42,11 @@ class ReplayController extends ChangeNotifier {
           now: clock.now,
           haptics: haptics,
           hapticsService: hapticsService,
+          audio: audio,
           replay: true,
         ) {
     game.replayShow(script.at(0));
+    _applySoundGate();
   }
 
   static double Function() _stopwatch() {
@@ -113,7 +119,13 @@ class ReplayController extends ChangeNotifier {
       return;
     }
     _clock.speed = value;
+    _applySoundGate();
     notifyListeners();
+  }
+
+  /// Effects play at 1x only; 2x and 4x mute them (the music is untouched).
+  void _applySoundGate() {
+    game.feedback.soundMuted = _clock.speed != 1;
   }
 
   /// One decision forward, animated. Pauses playback.

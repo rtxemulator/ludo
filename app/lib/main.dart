@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/storage/storage.dart';
 
+import 'audio/audio_service.dart';
+import 'audio/soloud_backend.dart';
 import 'settings/game_settings.dart';
 import 'settings/settings_store.dart';
 import 'storage/save_flush_observer.dart';
@@ -25,17 +27,27 @@ Future<void> main() async {
   } on Object {
     settingsStore = null; // defaults, nothing remembered
   }
-  runApp(LudoApp(settingsStore: settingsStore));
+  // The audio engine is not touched here: the app starts it after the first
+  // frame (LudoApp), and any failure only turns the sound off.
+  runApp(
+    LudoApp(
+      settingsStore: settingsStore,
+      audio: AudioService(backend: SoloudBackend()),
+    ),
+  );
 }
 
 class LudoApp extends StatefulWidget {
   /// [library] and [settingsStore] are injectable for tests; the app opens
   /// the real ones when they are omitted (without a [settingsStore] nothing
   /// is remembered between launches).
-  const LudoApp({super.key, this.library, this.settingsStore});
+  const LudoApp({super.key, this.library, this.settingsStore, this.audio});
 
   final SaveLibrary? library;
   final SettingsStore? settingsStore;
+
+  /// App-wide sound (tests pass one on a fake backend, or none for silence).
+  final AudioService? audio;
 
   @override
   State<LudoApp> createState() => _LudoAppState();
@@ -56,15 +68,26 @@ class _LudoAppState extends State<LudoApp> {
 
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
   VoidCallback? _stopSavingSettings;
+  VoidCallback? _unbindAudio;
 
   @override
   void initState() {
     super.initState();
     _stopSavingSettings = widget.settingsStore?.bind(_settings);
+    final audio = widget.audio;
+    if (audio != null) {
+      _unbindAudio = audio.bind(_settings);
+      // Lazy: after the first frame, never before runApp.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(audio.start());
+      });
+    }
   }
 
   @override
   void dispose() {
+    _unbindAudio?.call();
+    unawaited(widget.audio?.dispose());
     _stopSavingSettings?.call();
     _settings.dispose();
     super.dispose();
@@ -94,6 +117,7 @@ class _LudoAppState extends State<LudoApp> {
         builder: (_) => GameScreen(
           setup: setup,
           settings: _settings,
+          audio: widget.audio,
           saves: _library.queue,
           onReplay: _replayGameJustPlayed,
         ),
@@ -108,6 +132,7 @@ class _LudoAppState extends State<LudoApp> {
         builder: (_) => GameScreen(
           resumeFrom: save,
           settings: _settings,
+          audio: widget.audio,
           saves: _library.queue,
           onReplay: _replayGameJustPlayed,
           // "Players & rules" in a resumed game opens the setup in its place.
@@ -131,6 +156,7 @@ class _LudoAppState extends State<LudoApp> {
           script: script,
           salvaged: opening.salvaged,
           settings: _settings,
+          audio: widget.audio,
         ),
       ),
     );

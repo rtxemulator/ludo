@@ -8,7 +8,7 @@ Related: [[ludo-roadmap]] (milestone 6), [[ludo-ui-ux]] (section 7 effects, sect
 
 ## 1. Decisions (approved)
 
-- **Assets.** Sounds are synthesized by a committed script into Ogg Opus, at most 600 KB in total (chat B). The script is the source of truth; the `.ogg` files are build output that is committed with it.
+- **Assets.** Sounds are synthesized by a committed script into Ogg Opus, at most 600 KB in total (chat B). The script is the source of truth; the `.opus` files are build output that is committed with it.
 - **Sound set.** Dice roll, dice settle, hop, land, capture, home, six, win, illegal/no-move and select. They are placed on the existing haptic call sites (section 2).
 - **Defaults.** Effects on at 80 %, music off at 40 %.
 - **Music.** Plays only on the table and replay screens, with 400 ms fades in and out, and pauses when the app goes to the background.
@@ -57,10 +57,42 @@ Variation makes repeated sounds feel less mechanical: each cue gets a playback-r
 
 - **Format:** Ogg Opus, mono, 48 kHz, about 48 kbps (voice-like VBR is fine). Music: stereo is allowed, 64 kbps.
 - **Budget:** at most 600 KB for all sound and music assets together (the effects are under 100 KB at the lengths above; the rest is the music loop).
-- **Generator:** one committed script (`tool/` , plain Python with the standard library plus an Opus encoder call, or Dart, decided in chat B) synthesizes every sound from oscillators, noise and envelopes, with fixed seeds so the output is reproducible. No samples taken from anywhere else, so there is nothing to license (blueprint section 10: CC0 or self made).
-- **Location:** generated files in `app/assets/audio/`, registered in the app's `pubspec.yaml` assets list (chat B). Only audio is added there; there are still no raster assets.
+- **Generator (built in chat B):** `tool/audio/generate.py`, plain Python 3 with the standard library (`wave`, `math`, `random`, `array`) plus the `opusenc` command line encoder (`pkg install -y opus-tools` in Termux). Every sound is synthesized from oscillators, noise and envelopes; every random draw uses a fixed seed (`zlib.crc32` of the sound's name, a constant for the music) and `opusenc` gets a fixed serial, so the same script gives the same audio. No samples from anywhere, so nothing to license (blueprint section 10).
+- **Location:** `app/assets/audio/<SfxEvent name>.opus` for the ten effects and `music.opus`, registered as the `assets/audio/` folder in `app/pubspec.yaml`. Only audio is added there; there are still no raster assets. The file name is `sfxAssetFile(event)` in `sfx.dart`.
 - **Levels:** every effect is normalised to the same perceived loudness (about -16 LUFS integrated for the short ones, peak below -1 dBFS), so the 80 % default is comfortable and one volume slider is enough. Music is about 6 dB below the effects at the same slider value.
-- **Music:** one seamless ambient loop of 60 to 120 s, soft, no percussion that fights the dice sounds.
+- **Music:** one seamless ambient loop of 60 to 120 s, soft, no percussion that fights the dice sounds. Built: 60 s, stereo, 64 kbps constrained VBR (plain VBR overshot to 645 KB); four chords (Cmaj7, Am, Fmaj7, G6/9) crossfading in a circle, every oscillator with a whole number of cycles per loop, a few soft pentatonic bell notes wrapping around the end, so the loop is seamless before encoding. `AudioService` plays it at `musicGainBelowEffects` (0.5, -6 dB) times the slider, because the file itself is normalised like an effect.
+
+### Generator usage and what it made
+
+```
+python3 tool/audio/generate.py                       # everything (music takes about 2 min on a phone)
+python3 tool/audio/generate.py --only capture        # one effect, or "music"
+python3 tool/audio/generate.py --keep-wav DIR        # keep the WAV files
+python3 tool/audio/generate.py --out DIR             # another output folder
+```
+
+It prints one line per file (duration, size, LUFS, peak) and the total. Loudness is measured with ITU-R BS.1770 K-weighting; an effect is measured over its sound only (10 ms blocks within 30 dB of the loudest), the music over the whole loop; a soft limiter keeps peaks under -1 dBFS.
+
+| File | Duration | Size |
+|---|---|---|
+| `diceRoll.opus` | 470 ms (three knocks at 0, 230, 380 ms) | 3,587 B |
+| `diceSettle.opus` | 100 ms | 2,033 B |
+| `hop.opus` | 70 ms | 1,683 B |
+| `land.opus` | 120 ms | 1,934 B |
+| `capture.opus` | 350 ms | 3,028 B |
+| `home.opus` | 520 ms | 5,357 B |
+| `six.opus` | 260 ms | 3,655 B |
+| `win.opus` | 1,800 ms | 15,650 B |
+| `illegal.opus` | 160 ms | 2,574 B |
+| `select.opus` | 40 ms | 1,109 B |
+| `music.opus` | 60 s stereo | 488,811 B |
+| **Total** | | **529,421 B (517 KB of 600 KB)** |
+
+`test/audio/audio_assets_test.dart` (pure Dart, runs in the engine CI job) keeps it honest: every `SfxEvent` has a file, the folder holds nothing else, the total stays under 600 KB, each file is Ogg Opus with the right channel count and a length inside the window of section 2, the music is 60 to 120 s, and `pubspec.yaml` registers the folder.
+
+### Package
+
+`flutter_soloud` **5.2.2**, pinned exactly (Dart >= 3.11, Flutter >= 3.41). CI uses the stable Flutter channel unpinned; its last run resolved to Flutter 3.47.9. 5.2.2 is the latest release and the SDK constraint is met. It plays Ogg Opus through prebuilt Xiph libraries fetched by its native build hook; a CI failure in that native build would be a stop-and-report case (no other package is a fallback).
 
 ---
 
@@ -75,6 +107,15 @@ Variation makes repeated sounds feel less mechanical: each cue gets a playback-r
 - Replay: `ReplayController.speed == 1x` plays effects; 2x and 4x mute them (music is unaffected). A scrub or a jump plays nothing.
 - Variation uses the `SfxPlayer`'s own `Random`. Nothing in the audio path may read `GameState.rngState` or call `Dice`.
 - Settings are applied live: `sfxEnabled` and `sfxVolume` go to `SfxPlayer.enabled/volume`, `musicEnabled` and `musicVolume` to the music voice.
+
+**As built (`app/lib/audio/`):**
+
+- `AudioBackend` is the small abstract engine (`init`, `loadEffect`, `loadMusic`, `playEffect(volume, rate)`, `startMusic`, `setMusicVolume`, `pauseMusic`, `dispose`). `SoloudBackend` is the only file that imports `flutter_soloud`, and only `main.dart` imports it, so no test loads the plugin; tests use `FakeAudioBackend` and `FakeAudioClock` (`app/test/fakes/fake_audio.dart`).
+- `AudioService` owns the `SfxPlayer` (its `emit` goes to `playEffect`) and the music voice. Effects are decoded into memory once at `start()`; the music streams from disk (`LoadMode.disk`) and is protected from voice stealing. `start()` is called from a post-frame callback in `LudoApp`. Any exception turns the service off for the session (`debugPrint`, backend disposed once). `bind(GameSettings)` applies the four sound settings now and on every change; `LudoApp`, `GameScreen` and `ReplayScreen` all bind (idempotent).
+- Music is state, not an event: `enterMusicScreen()` / `leaveMusicScreen()` count the screens that want it (the replay opened over the table makes it 2, so the track keeps playing); it plays when ready, enabled, a screen is up and the app is `resumed`. A request made before the engine is ready is remembered and starts when it is (effects are dropped, not remembered). The fade is `MusicFade` (`lib/ui/core/music_fade.dart`, pure): linear, 400 ms for a full swing, a partial swing takes proportionally less. Leaving `resumed` pauses at once without a fade and drops delayed cues; returning fades in from silence. The music pauses (keeps its place) after a fade-out, so the next screen continues the track.
+- `GameFeedback` (`game_feedback.dart`) is the one place that plays haptic and sound together: `feedback.play(HapticEvent.x)` is unchanged at all call sites, so timing is unchanged; `feedback.sound(SfxEvent.hop)` is the hop. `feedback.enabled` stays the haptics switch. `soundMuted` is the replay gate (setting it drops delayed cues); `ReplayController.speed` sets it (`!= 1` mutes); `replayShow` (scrub, jump, step back) cancels delayed cues and plays nothing.
+- Hops: `MoveAnimationPlan.hopTimesMs` (pure, from `hopSoundTimesMs`) lists one take-off time per hop step (`hopStepMs` 130 ms; a yard exit is one hop of `yardExitMs`; none with reduced motion); `GameController.tick` fires them.
+- A test scans `app/lib/audio/` for `rngState` and `Dice`.
 
 ---
 
@@ -129,7 +170,7 @@ Loading is tolerant: a missing, mistyped or unknown value (a bool where a string
 
 ## 8. Settings screen and menu
 
-- **Shared panel** (`SettingsPanel`, `app/lib/ui/settings/settings_panel.dart`): the rows that used to live inside the menu page (Haptics, Reduce motion, UI orientation, Auto-rotate menu to active seat, Frame timing overlay), unchanged, as a scrollable list bound to a `GameSettings`. Chat B adds the Sound rows and chat C the Look rows to this one panel, so both entry points get them.
+- **Shared panel** (`SettingsPanel`, `app/lib/ui/settings/settings_panel.dart`): the rows that used to live inside the menu page (Haptics, Reduce motion, UI orientation, Auto-rotate menu to active seat, Frame timing overlay), as a scrollable list bound to a `GameSettings`. Chat B added a **Sound** section (header, Sound effects switch and slider, Music switch and slider; keys `sfx-switch`, `sfx-volume`, `music-switch`, `music-volume`) between Auto-rotate and Frame timing overlay; a slider is greyed out while its switch is off, and changes apply live through `AudioService.bind` and persist through `SettingsStore`. Chat C adds the Look rows to this one panel, so both entry points get them.
 - **`SettingsScreen`** (`app/lib/ui/settings/settings_screen.dart`): a normal route with an app bar and the panel. Home has a gear button (key `home-settings`) that opens it.
 - **In-game menu:** the Settings entry shows the same panel inside the turned menu card, with its own back arrow.
 - **Menu entries now:** New game, Players & rules (when available), Settings, Close. No Rules item.
@@ -140,7 +181,7 @@ Loading is tolerant: a missing, mistyped or unknown value (a bool where a string
 ## 9. Chat plan
 
 - **Chat A (done with this doc):** this doc; settings model and store; shared panel, `SettingsScreen` and the Home gear; the Rules item removed; `lib/ui/core/sfx.dart` and tests; status pointers. No plugin, no assets.
-- **Chat B (sound):**
+- **Chat B (sound), done:**
   1. The synthesis script and the generated assets (<= 600 KB), a test or CI check of the size cap, `pubspec.yaml` asset entries.
   2. `flutter_soloud` as the only new dependency; an `AudioService` in `app/lib/audio/` that binds `SfxPlayer` to the engine (lazy init, silent failures, no audio focus), plus a music voice with 400 ms fades.
   3. Hook the player into the haptic call sites (one place that plays haptic and sound together), the `hop` call site, replay speed gating, music on the table and the replay screen only, lifecycle pause.
@@ -165,6 +206,22 @@ Chat A (settings and menu, no sound yet):
 4. Banked rolls can still be switched in Players & rules.
 5. Settings persist across a full restart (force stop and reopen).
 
-Chat B (to fill in): effects audible on every event of section 2; volume slider live; effects off is silent; music off by default, fades in and out at 400 ms, plays on the table and in a replay only, pauses in the background; replay at 2x and 4x is silent for effects; other apps' audio is not interrupted; airplane or silent mode behaves; airplane of a missing audio device does not crash.
+Chat B (sound). Use the release or profile APK from CI; effects volume 80 %, music volume 40 % (defaults) unless a step says otherwise.
+
+1. Cold start feels the same as before (the audio engine starts after the first frame). Home is silent.
+2. Start a game with sound effects on. Each event is audible and fits the moment: dice roll (three knocks on the three bounces), dice settle click, a hop per square (a run of soft plucks, one per step; a yard exit is one hop), landing, capture (heavier knock and a sweep), reaching home (three rising bells), a six (two-note chime just after the settle), win (short fanfare), illegal tap and "no move" (low double tick), roll-tray chip select (tiny tick). Haptics still fire exactly where they did.
+3. Dice and hop sounds line up with what you see (no obvious lag); note how late the first sound feels after a tap.
+4. Settings, Sound effects volume slider while playing: the next sound follows it. Sound effects off: silence (haptics unaffected). Back on: sounds return.
+5. Music is off by default. Switch it on in Settings (from Home): nothing plays on Home or Settings. Start a game: music fades in over about 0.4 s. It is clearly quieter than the effects at equal sliders.
+6. Music slider moves the volume live. Music off in the in-game menu: it fades out and stops; on again: it fades in.
+7. Game menu, New game, Players & rules, Saved Games, Setup, Home: the music fades out when the table is left and is silent on those screens.
+8. Game over, Watch replay: the music keeps playing without a restart; leave the replay back to the table: still playing; leave the table to Home: it fades out.
+9. Home button or app switcher: the music pauses at once. Come back: it fades in again. No effect "ghost" plays after coming back.
+10. Replay at 1x plays the effects; 2x and 4x are silent for effects; dragging the scrubber, Jump to start or end and Step back are silent. The music is unaffected by the speed.
+11. Listen to the music loop for a minute or two (it is 60 s): the seam where it starts again should not click or jump.
+12. Other apps: start music or a podcast in another app, then open Ludo and play with the music off: the other audio is not interrupted or ducked by effects. Notification volume or silent mode behaves like any media app (media volume controls it).
+13. Replay in the background or screen off does not keep playing sound.
+14. Airplane mode and a Bluetooth headset connecting or disconnecting mid-game do not crash; if audio breaks, the game goes on silent.
+15. Settings persist across a full restart (switches and both volumes).
 
 Chat C (to fill in): each palette in light and dark on the table, the menu and the screens; theme mode System follows the phone; High Contrast legibility check outdoors; nothing in a saved game or replay changes with the look.

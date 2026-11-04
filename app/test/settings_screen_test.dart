@@ -25,6 +25,10 @@ Future<void> _flushSaves(WidgetTester tester) async {
 void main() {
   group('SettingsScreen', () {
     testWidgets('shows the settings rows under an app bar', (tester) async {
+      // Tall enough for every row to be built (the list is lazy).
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(home: SettingsScreen(settings: GameSettings())),
       );

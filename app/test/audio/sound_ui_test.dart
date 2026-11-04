@@ -152,12 +152,12 @@ void main() {
       expect(audio.service.musicEnabled, isTrue, reason: 'applies live');
       expect(audio.backend.startMusicCalls, 0);
 
-      await tester.tap(_sfxSwitch);
-      await tester.pumpAndSettle();
-      expect(audio.service.sfxEnabled, isFalse, reason: 'applies live');
       await tester.drag(_sfxSlider, const Offset(-100, 0));
       await tester.pumpAndSettle();
       expect(audio.service.sfxVolume, lessThan(defaultSfxVolume));
+      await tester.tap(_sfxSwitch);
+      await tester.pumpAndSettle();
+      expect(audio.service.sfxEnabled, isFalse, reason: 'applies live');
 
       // Back on Home and on Setup: still silent.
       await tester.pageBack();

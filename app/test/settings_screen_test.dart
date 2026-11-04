@@ -36,6 +36,8 @@ void main() {
         'Reduce motion',
         'UI orientation',
         'Auto-rotate menu to active seat',
+        'Sound effects',
+        'Music',
         'Frame timing overlay',
       ]) {
         expect(find.text(row), findsOneWidget, reason: row);

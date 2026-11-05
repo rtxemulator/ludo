@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesizes every Ludo sound effect and the ambient music loop.
+"""Synthesizes every Ludo sound effect and the music loop.
 
 Plain Python 3 with the standard library only (`wave`, `math`, `random`,
 `array`), plus the `opusenc` command line encoder (Termux: `pkg install
@@ -15,7 +15,7 @@ Usage (from the repository root):
     python3 tool/audio/generate.py --keep-wav /tmp/wavs   # keep the WAVs too
     python3 tool/audio/generate.py --out some/dir  # other output directory
 
-Output: `app/assets/audio/<SfxEvent name>.opus` for the ten effects (mono,
+Output: `app/assets/audio/<SfxEvent name>.opus` for the eleven effects (mono,
 48 kHz, 48 kbps VBR) and `music.opus` (stereo, 48 kHz, 64 kbps constrained VBR,
 60 s seamless loop). Every
 effect is normalised to the same loudness (-16 LUFS over its active part,
@@ -169,22 +169,66 @@ def horn(freq: float, dur_ms: float, attack_ms: float, release_ms: float, tau_ms
 
 
 # ---- The ten effects -------------------------------------------------------
-# Durations follow docs/ludo-sound-themes.md section 2 (the dice roll spans
-# its three bounces, 0 / 230 / 380 ms after the first, so it is a bit longer
-# than the "about 380 ms" of the table).
+# Durations follow docs/ludo-sound-themes.md section 2. The dice throw plays
+# while the die is in the air (0 to 420 ms of the roll); the dice roll starts
+# at the first impact and runs until the settle click.
 
 
-def knock(rng: random.Random, dur_ms: float, pitch: float = 1.0, bright: float = 1.0) -> array:
-    body = modal([(210, 1.0, 26), (430, 0.55, 16), (790, 0.30, 9), (1380, 0.14, 5)], dur_ms, pitch)
-    add(body, noise(rng, 6, 1.2, 4500 * bright), 0, 0.5)
-    return body
+def clack(rng: random.Random, freq: float, gain: float = 1.0, body: float = 0.4,
+          tau: float = 5.0, bright: float = 1.0) -> array:
+    """A die hitting a wooden table: a hard click, a short ring and a small thump."""
+    out = zeros(ms(70))
+    ring = modal([(freq, 1.0, tau), (freq * 1.83, 0.45, tau * 0.7), (freq * 3.1, 0.2, tau * 0.5)], 40)
+    add(out, ring, 0, gain)
+    add(out, noise(rng, 5, 0.9, 6500 * bright), 0, 0.9 * gain)
+    add(out, modal([(130, 1.0, 16), (260, 0.4, 9)], 70), 0, body * gain)
+    return out
+
+
+def fx_dice_throw(rng: random.Random) -> array:
+    """The die leaves the hand and tumbles through the air (420 ms, until the
+    first impact): a quick rattle in the hand, then an airy whoosh that
+    flutters at the tumble rate (2.5 turns in 420 ms)."""
+    out = zeros(ms(420))
+    n = 11
+    for i in range(n):
+        at = i * 13 + rng.uniform(-3, 3)
+        add(out, clack(rng, rng.uniform(1800, 3400), 0.5 * (1 - 0.6 * i / n), 0.05, 3.0), at, 1.0)
+    sweep = air_whoosh(rng, 420, 450, 2200, 5.95)
+    rescale_rms(sweep, 0.10)
+    add(out, sweep, 0, 1.0)
+    return out
+
+
+def air_whoosh(rng: random.Random, dur_ms: float, lo: float, hi: float, flutter_hz: float) -> array:
+    """Noise through a two-pole low-pass that opens to [hi] mid-way and closes
+    again, with an amplitude flutter (the tumbling die)."""
+    n = ms(dur_ms)
+    out = zeros(n)
+    y1 = y2 = 0.0
+    for i in range(n):
+        u = i / n
+        fc = lo * (hi / lo) ** math.sin(math.pi * u)
+        a = 1 - math.exp(-2 * math.pi * fc / SR)
+        y1 += a * (rng.uniform(-1, 1) - y1)
+        y2 += a * (y1 - y2)
+        env = math.sin(math.pi * u) ** 1.2 * (0.7 + 0.3 * math.sin(2 * math.pi * flutter_hz * i / SR))
+        out[i] = y2 * env
+    return out
 
 
 def fx_dice_roll(rng: random.Random) -> array:
-    out = zeros(ms(470))
-    add(out, knock(rng, 170, 1.0, 1.0), 0, 1.0)
-    add(out, knock(rng, 160, 0.94, 0.9), 230, 0.65)
-    add(out, knock(rng, 90, 1.07, 0.8), 380, 0.38)
+    """Three impacts on the table (0 / 230 / 380 ms after the first), the die
+    skittering in between and rolling out until the settle click (500 ms)."""
+    out = zeros(ms(510))
+    add(out, clack(rng, 2100, 1.0, 0.5), 0)
+    add(out, clack(rng, 2700, 0.22, 0.1, 3.0), 55)
+    add(out, clack(rng, 2950, 0.18, 0.1, 3.0), 105)
+    add(out, clack(rng, 2350, 0.62, 0.3), 230)
+    add(out, clack(rng, 3050, 0.18, 0.1, 3.0), 285)
+    add(out, clack(rng, 2700, 0.40, 0.15), 380)
+    for at, f, g in ((410, 3000, 0.20), (432, 3250, 0.15), (452, 3400, 0.10), (470, 3500, 0.07)):
+        add(out, clack(rng, f * rng.uniform(0.97, 1.03), g, 0.05, 2.5), at)
     return out
 
 
@@ -258,6 +302,7 @@ def fx_select(rng: random.Random) -> array:
 
 
 EFFECTS = {
+    "diceThrow": fx_dice_throw,
     "diceRoll": fx_dice_roll,
     "diceSettle": fx_dice_settle,
     "hop": fx_hop,
@@ -271,75 +316,128 @@ EFFECTS = {
 }
 
 
-# ---- The ambient loop ------------------------------------------------------
-# Four soft chords (C maj7, A m, F maj7, G 6/9) of 15 s each crossfade in a
-# circle, so the end of the loop flows into its start. Every oscillator has a
-# whole number of cycles per loop and the sparse bell notes wrap around the
-# end, so the loop is seamless before encoding. It is synthesized at 16 kHz
-# (nothing in it needs more) and brought up to 48 kHz by linear interpolation.
+# ---- The music loop ----------------------------------------------------------
+# A light, playful loop in C major at 96 BPM: 24 bars = exactly 60 s. A soft
+# kalimba melody over an eighth-note arpeggio, a round bass on beats 1 and 3
+# and a very quiet pad. Three 8-bar sections (C Am F G / F G C Am / C Am F G)
+# of four chords, two bars each; the last chord (G) leads back to the first
+# (C). Every note's tail and every pad window wrap around the end, and each
+# pad oscillator has a whole number of cycles per loop, so the loop is
+# seamless before encoding. Synthesized at 16 kHz and brought up to 48 kHz by
+# linear interpolation.
 
 MUSIC_SR = 16000
 MUSIC_SECONDS = 60
 MUSIC_UP = SR // MUSIC_SR
-CHORD_SECONDS = 15
-CHORDS = (
-    (130.81, 196.00, 329.63, 493.88),  # C3 G3 E4 B4
-    (110.00, 164.81, 261.63, 392.00),  # A2 E3 C4 G4
-    (87.31, 130.81, 220.00, 329.63),  # F2 C3 A3 E4
-    (98.00, 146.83, 246.94, 329.63),  # G2 D3 B3 E4
-)
-VOICE_GAIN = (1.0, 0.8, 0.7, 0.5)
-PENTATONIC = (523.25, 587.33, 659.25, 783.99, 880.0, 1046.5)
+BEAT = 60.0 / 96
+EIGHTH = BEAT / 2
+BAR = BEAT * 4
+SLOT = BAR * 2  # one chord = two bars = 5 s
+
+SECTIONS = (("C", "Am", "F", "G"), ("F", "G", "C", "Am"), ("C", "Am", "F", "G"))
+
+ARPEGGIO = {
+    "C": (261.63, 329.63, 392.00, 523.25),
+    "Am": (220.00, 261.63, 329.63, 440.00),
+    "F": (174.61, 220.00, 261.63, 349.23),
+    "G": (196.00, 246.94, 293.66, 392.00),
+}
+BASS = {"C": 130.81, "Am": 110.00, "F": 87.31, "G": 98.00}
+PAD = {
+    "C": (196.00, 261.63, 329.63),
+    "Am": (220.00, 261.63, 329.63),
+    "F": (174.61, 220.00, 261.63),
+    "G": (196.00, 246.94, 293.66),
+}
+# Melody per chord: (eighth note within the two bars, Hz).
+MELODY = {
+    "C": ((0, 659.25), (2, 783.99), (4, 880.00), (6, 783.99), (8, 659.25), (10, 587.33), (12, 523.25)),
+    "Am": ((0, 523.25), (2, 659.25), (4, 880.00), (7, 783.99), (8, 659.25), (12, 523.25), (14, 587.33)),
+    "F": ((0, 440.00), (2, 523.25), (4, 698.46), (6, 659.25), (8, 523.25), (10, 440.00), (12, 523.25)),
+    "G": ((0, 587.33), (2, 493.88), (4, 392.00), (6, 493.88), (8, 587.33), (10, 783.99), (12, 587.33), (14, 659.25)),
+}
+ARP_UP = (0, 1, 2, 3, 2, 1, 2, 1)
+ARP_DOWN = (3, 2, 1, 0, 1, 2, 1, 2)
+KALIMBA = ((1.0, 1.0, 1.0), (4.0, 0.25, 0.12), (9.2, 0.06, 0.05))
+
+
+def add_note(left: array, right: array, at_s: float, freq: float, amp: float,
+             tau_s: float, pan: float, partials=KALIMBA) -> None:
+    """A plucked note (a few decaying partials), wrapping around the loop end."""
+    n = len(left)
+    base = int(at_s * MUSIC_SR)
+    att = max(1, int(0.004 * MUSIC_SR))
+    for ratio, a, dscale in partials:
+        f = freq * ratio
+        if f > 6500:
+            continue
+        w = 2 * math.pi * f / MUSIC_SR
+        k = math.exp(-1.0 / (tau_s * dscale * MUSIC_SR))
+        level = amp * a
+        for i in range(int(5 * tau_s * dscale * MUSIC_SR)):
+            s = level * (i / att if i < att else 1.0) * math.sin(w * i)
+            j = (base + i) % n
+            left[j] += s * (1 - pan)
+            right[j] += s * pan
+            level *= k
 
 
 def make_music(log) -> tuple[array, array]:
     n = MUSIC_SR * MUSIC_SECONDS
     left = zeros(n)
     right = zeros(n)
+    rng = random.Random(20261105)
+    slots = [chord for section in SECTIONS for chord in section]
+
+    # Pad: very quiet sustained chords, crossfading in a circle.
     two_pi = 2 * math.pi
-    for c, freqs in enumerate(CHORDS):
-        centre = (c + 0.5) * CHORD_SECONDS
-        start = int((centre - CHORD_SECONDS) * MUSIC_SR)
-        end = int((centre + CHORD_SECONDS) * MUSIC_SR)
+    for c, chord in enumerate(slots):
+        centre = (c + 0.5) * SLOT
+        start = int((centre - SLOT) * MUSIC_SR)
+        end = int((centre + SLOT) * MUSIC_SR)
         seg = end - start
         stem_l = zeros(seg)
         stem_r = zeros(seg)
-        for v, f in enumerate(freqs):
-            for side, detune in ((0, 7 + v), (1, -(7 + v))):
-                cycles = round(f * MUSIC_SECONDS) + detune
-                w = two_pi * cycles / n
-                vals = [math.sin(w * i) + 0.22 * math.sin(2 * w * i) for i in range(start, end)]
-                gl, gr = (0.7, 0.3) if side == 0 else (0.3, 0.7)
-                g = VOICE_GAIN[v] * 0.25
-                for i in range(seg):
-                    x = vals[i] * g
-                    stem_l[i] += x * gl
-                    stem_r[i] += x * gr
-            log(f"  chord {c + 1}/4 voice {v + 1}/4")
-        # Window: partition of unity between neighbouring chords.
+        for v, f in enumerate(PAD[chord]):
+            cycles = round(f * MUSIC_SECONDS) + (v - 1) * 5
+            w = two_pi * cycles / n
+            vals = [math.sin(w * i) + 0.2 * math.sin(2 * w * i) for i in range(start, end)]
+            pan = (0.3, 0.5, 0.7)[v]
+            for i in range(seg):
+                stem_l[i] += vals[i] * (1 - pan)
+                stem_r[i] += vals[i] * pan
         for i in range(seg):
             d = abs((start + i) / MUSIC_SR - centre)
-            w = math.cos(math.pi * d / (2 * CHORD_SECONDS)) ** 2
+            win = math.cos(math.pi * d / (2 * SLOT)) ** 2 * 0.06
             j = (start + i) % n
-            left[j] += stem_l[i] * w
-            right[j] += stem_r[i] * w
-    # Sparse soft bell notes, wrapping around the end of the loop.
-    rng = random.Random(20261104)
-    count = 14
-    for k in range(count):
-        at = (k + 0.5) * MUSIC_SECONDS / count + rng.uniform(-1.2, 1.2)
-        freq = rng.choice(PENTATONIC)
-        pan = rng.uniform(0.2, 0.8)
-        length = 4 * MUSIC_SR
-        att = int(0.03 * MUSIC_SR)
-        w = two_pi * freq / MUSIC_SR
-        base = int(at * MUSIC_SR)
-        for i in range(length):
-            env = math.exp(-i / (1.1 * MUSIC_SR)) * (i / att if i < att else 1.0)
-            s = 0.07 * env * (math.sin(w * i) + 0.25 * math.sin(2.01 * w * i))
-            j = (base + i) % n
-            left[j] += s * (1 - pan)
-            right[j] += s * pan
+            left[j] += stem_l[i] * win
+            right[j] += stem_r[i] * win
+        log(f"  pad {c + 1}/{len(slots)}")
+
+    # Notes: bass, arpeggio and melody, bar by bar.
+    for c, chord in enumerate(slots):
+        section = c // 4
+        t0 = c * SLOT
+        arp = ARPEGGIO[chord]
+        pattern = ARP_DOWN if section == 1 else ARP_UP
+        for bar in range(2):
+            tb = t0 + bar * BAR
+            for beat_eighth in (0, 4):
+                add_note(left, right, tb + beat_eighth * EIGHTH, BASS[chord],
+                         0.60 * rng.uniform(0.92, 1.04), 0.50, 0.5,
+                         ((1.0, 1.0, 1.0), (2.0, 0.45, 0.6)))
+            for e in range(8):
+                strong = 1.0 if e % 4 == 0 else 0.75
+                add_note(left, right, tb + e * EIGHTH + rng.uniform(-0.006, 0.006),
+                         arp[pattern[e]], 0.20 * strong * rng.uniform(0.9, 1.05), 0.30,
+                         0.35 if e % 2 == 0 else 0.65)
+        for e, f in MELODY[chord]:
+            at = t0 + e * EIGHTH + rng.uniform(-0.008, 0.008)
+            amp = 0.42 * rng.uniform(0.92, 1.05)
+            add_note(left, right, at, f, amp, 0.70, 0.55)
+            if section == 1:  # the middle section doubles the melody an octave down
+                add_note(left, right, at, f / 2, amp * 0.35, 0.70, 0.45)
+        log(f"  chord {c + 1}/{len(slots)} ({chord})")
     return upsample(left), upsample(right)
 
 

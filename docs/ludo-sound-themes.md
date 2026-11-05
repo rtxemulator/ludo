@@ -9,7 +9,7 @@ Related: [[ludo-roadmap]] (milestone 6), [[ludo-ui-ux]] (section 7 effects, sect
 ## 1. Decisions (approved)
 
 - **Assets.** Sounds are synthesized by a committed script into Ogg Opus, at most 600 KB in total (chat B). The script is the source of truth; the `.opus` files are build output that is committed with it.
-- **Sound set.** Dice roll, dice settle, hop, land, capture, home, six, win, illegal/no-move and select. They are placed on the existing haptic call sites (section 2).
+- **Sound set.** Dice throw, dice roll, dice settle, hop, land, capture, home, six, win, illegal/no-move and select. They are placed on the existing haptic call sites (section 2).
 - **Defaults.** Effects on at 80 %, music off at 40 %.
 - **Music.** Plays only on the table and replay screens, with 400 ms fades in and out, and pauses when the app goes to the background.
 - **Replay.** Effects play at 1x and are silent at 2x and 4x. Music follows the normal music rules.
@@ -24,11 +24,12 @@ Related: [[ludo-roadmap]] (milestone 6), [[ludo-ui-ux]] (section 7 effects, sect
 
 ## 2. Sound catalogue
 
-Every sound sits on a haptic call site in `GameController` (`feedback.play(HapticEvent.x)`), except `hop`, which has no haptic. `sfxFor(HapticEvent)` in `lib/ui/core/sfx.dart` is the mapping. The player that bundles haptic and sound (chat B) calls both from the same place, so the two can never drift apart.
+Every sound sits on a haptic call site in `GameController` (`feedback.play(HapticEvent.x)`), except `hop` and `diceThrow`, which have no haptic. `sfxFor(HapticEvent)` in `lib/ui/core/sfx.dart` is the mapping. The player that bundles haptic and sound (chat B) calls both from the same place, so the two can never drift apart.
 
 | Sound (`SfxEvent`) | Haptic event | Call site | Character | Duration |
 |---|---|---|---|---|
-| `diceRoll` | `diceImpact` | `tick`, first dice impact (420 ms into the roll) | three wooden knocks on the bounce times (420, 650, 800 ms), the last one softest | about 380 ms |
+| `diceThrow` | none | `roll()`, the moment the die leaves the hand (pop-in, 0 ms) | the die in the air until the first impact: a quick rattle in the hand, then an airy whoosh that opens and closes and flutters at the tumble rate | 420 ms |
+| `diceRoll` | `diceImpact` | `tick`, first dice impact (420 ms into the roll) | three clacks of a die on a wooden table on the bounce times (420, 650, 800 ms), each lighter than the last, small skitters in between and a roll-out of fading ticks until the settle | about 510 ms |
 | `diceSettle` | `diceSettle` | `_finishRoll`, `_finishBankedRoll` (face locks, 920 ms) | one dry click, the die has stopped | about 90 ms |
 | `hop` | none | one per hop step of a move (`hopStepMs` 130 ms), hooked in chat B | soft short pluck, light and wooden | about 70 ms |
 | `land` | `tokenLand` | `tick`, move impact, a plain landing | pawn set down on the board, a muted tock | about 120 ms |
@@ -47,7 +48,7 @@ Notes:
 
 ### Rate limits and variation (`lib/ui/core/sfx.dart`)
 
-A per-event minimum gap stops a burst from smearing (a sound that fires again before the first has ended just muddies). Gaps in ms: `diceRoll` 300, `diceSettle` 100, `hop` 60, `land` 80, `capture` 150, `home` 200, `six` 200, `win` 1500, `illegal` 120, `select` 40.
+A per-event minimum gap stops a burst from smearing (a sound that fires again before the first has ended just muddies). Gaps in ms: `diceThrow` 300, `diceRoll` 300, `diceSettle` 100, `hop` 60, `land` 80, `capture` 150, `home` 200, `six` 200, `win` 1500, `illegal` 120, `select` 40.
 
 Variation makes repeated sounds feel less mechanical: each cue gets a playback-rate factor `1 +/- pitch` and a gain factor `1 +/- gain` drawn from the player's own `Random`. `hop` and `land` vary the most (pitch 6 %, gain 8 %), `diceRoll` and `select` a little (3 %, 5 %), `win`, `six`, `home`, `capture` and `illegal` almost not at all (0-2 %), because those carry meaning.
 
@@ -58,9 +59,9 @@ Variation makes repeated sounds feel less mechanical: each cue gets a playback-r
 - **Format:** Ogg Opus, mono, 48 kHz, about 48 kbps (voice-like VBR is fine). Music: stereo is allowed, 64 kbps.
 - **Budget:** at most 600 KB for all sound and music assets together (the effects are under 100 KB at the lengths above; the rest is the music loop).
 - **Generator (built in chat B):** `tool/audio/generate.py`, plain Python 3 with the standard library (`wave`, `math`, `random`, `array`) plus the `opusenc` command line encoder (`pkg install -y opus-tools` in Termux). Every sound is synthesized from oscillators, noise and envelopes; every random draw uses a fixed seed (`zlib.crc32` of the sound's name, a constant for the music) and `opusenc` gets a fixed serial, so the same script gives the same audio. No samples from anywhere, so nothing to license (blueprint section 10).
-- **Location:** `app/assets/audio/<SfxEvent name>.opus` for the ten effects and `music.opus`, registered as the `assets/audio/` folder in `app/pubspec.yaml`. Only audio is added there; there are still no raster assets. The file name is `sfxAssetFile(event)` in `sfx.dart`.
+- **Location:** `app/assets/audio/<SfxEvent name>.opus` for the eleven effects and `music.opus`, registered as the `assets/audio/` folder in `app/pubspec.yaml`. Only audio is added there; there are still no raster assets. The file name is `sfxAssetFile(event)` in `sfx.dart`.
 - **Levels:** every effect is normalised to the same perceived loudness (about -16 LUFS integrated for the short ones, peak below -1 dBFS), so the 80 % default is comfortable and one volume slider is enough. Music is about 6 dB below the effects at the same slider value.
-- **Music:** one seamless ambient loop of 60 to 120 s, soft, no percussion that fights the dice sounds. Built: 60 s, stereo, 64 kbps constrained VBR (plain VBR overshot to 645 KB); four chords (Cmaj7, Am, Fmaj7, G6/9) crossfading in a circle, every oscillator with a whole number of cycles per loop, a few soft pentatonic bell notes wrapping around the end, so the loop is seamless before encoding. `AudioService` plays it at `musicGainBelowEffects` (0.5, -6 dB) times the slider, because the file itself is normalised like an effect.
+- **Music:** one seamless loop of 60 to 120 s, soft, nothing that fights the dice sounds. Built (second version, replacing the first ambient pad loop): 60 s, stereo, 64 kbps constrained VBR (plain VBR overshot to 645 KB); light and playful, C major, 96 BPM, 24 bars: a soft kalimba melody over an eighth-note arpeggio, a round bass on beats 1 and 3 and a very quiet pad, in three 8-bar sections (C Am F G, then F G C Am with the melody doubled an octave down and a descending arpeggio, then C Am F G); the last chord (G) leads back to the first. Every note tail and pad window wraps around the end and every pad oscillator has a whole number of cycles per loop, so the loop is seamless before encoding. `AudioService` plays it at `musicGainBelowEffects` (0.5, -6 dB) times the slider, because the file itself is normalised like an effect.
 
 ### Generator usage and what it made
 
@@ -75,7 +76,8 @@ It prints one line per file (duration, size, LUFS, peak) and the total. Loudness
 
 | File | Duration | Size |
 |---|---|---|
-| `diceRoll.opus` | 470 ms (three knocks at 0, 230, 380 ms) | 3,587 B |
+| `diceThrow.opus` | 420 ms (the die in the air) | 3,396 B |
+| `diceRoll.opus` | 510 ms (three clacks at 0, 230, 380 ms, then the roll-out) | 3,139 B |
 | `diceSettle.opus` | 100 ms | 2,033 B |
 | `hop.opus` | 70 ms | 1,683 B |
 | `land.opus` | 120 ms | 1,934 B |
@@ -85,8 +87,8 @@ It prints one line per file (duration, size, LUFS, peak) and the total. Loudness
 | `win.opus` | 1,800 ms | 15,650 B |
 | `illegal.opus` | 160 ms | 2,574 B |
 | `select.opus` | 40 ms | 1,109 B |
-| `music.opus` | 60 s stereo | 488,811 B |
-| **Total** | | **529,421 B (517 KB of 600 KB)** |
+| `music.opus` | 60 s stereo | 488,685 B |
+| **Total** | | **532,243 B (520 KB of 600 KB)** |
 
 `test/audio/audio_assets_test.dart` (pure Dart, runs in the engine CI job) keeps it honest: every `SfxEvent` has a file, the folder holds nothing else, the total stays under 600 KB, each file is Ogg Opus with the right channel count and a length inside the window of section 2, the music is 60 to 120 s, and `pubspec.yaml` registers the folder.
 
@@ -209,7 +211,7 @@ Chat A (settings and menu, no sound yet):
 Chat B (sound). Use the release or profile APK from CI; effects volume 80 %, music volume 40 % (defaults) unless a step says otherwise.
 
 1. Cold start feels the same as before (the audio engine starts after the first frame). Home is silent.
-2. Start a game with sound effects on. Each event is audible and fits the moment: dice roll (three knocks on the three bounces), dice settle click, a hop per square (a run of soft plucks, one per step; a yard exit is one hop), landing, capture (heavier knock and a sweep), reaching home (three rising bells), a six (two-note chime just after the settle), win (short fanfare), illegal tap and "no move" (low double tick), roll-tray chip select (tiny tick). Haptics still fire exactly where they did.
+2. Start a game with sound effects on. Each event is audible and fits the moment: dice throw (a rattle and a whoosh as soon as you roll, in the air), dice roll (three clacks on the table), dice settle click, a hop per square (a run of soft plucks, one per step; a yard exit is one hop), landing, capture (heavier knock and a sweep), reaching home (three rising bells), a six (two-note chime just after the settle), win (short fanfare), illegal tap and "no move" (low double tick), roll-tray chip select (tiny tick). Haptics still fire exactly where they did.
 3. Dice and hop sounds line up with what you see (no obvious lag); note how late the first sound feels after a tap.
 4. Settings, Sound effects volume slider while playing: the next sound follows it. Sound effects off: silence (haptics unaffected). Back on: sounds return.
 5. Music is off by default. Switch it on in Settings (from Home): nothing plays on Home or Settings. Start a game: music fades in over about 0.4 s. It is clearly quieter than the effects at equal sliders.
@@ -218,7 +220,8 @@ Chat B (sound). Use the release or profile APK from CI; effects volume 80 %, mus
 8. Game over, Watch replay: the music keeps playing without a restart; leave the replay back to the table: still playing; leave the table to Home: it fades out.
 9. Home button or app switcher: the music pauses at once. Come back: it fades in again. No effect "ghost" plays after coming back.
 10. Replay at 1x plays the effects; 2x and 4x are silent for effects; dragging the scrubber, Jump to start or end and Step back are silent. The music is unaffected by the speed.
-11. Listen to the music loop for a minute or two (it is 60 s): the seam where it starts again should not click or jump.
+11. Listen to the music loop for a minute or two (it is 60 s): the seam where it starts again should not click or jump. It should feel light and playful (kalimba, arpeggio), not busy; the dice sounds stay clear on top of it.
+11b. Roll the die: a rattle and whoosh the moment it leaves the hand and while it is in the air, the clacks on the three bounces, then the settle click. Tap the dock again during the roll (quick roll): the throw plays, the table clacks are skipped, the settle click plays.
 12. Other apps: start music or a podcast in another app, then open Ludo and play with the music off: the other audio is not interrupted or ducked by effects. Notification volume or silent mode behaves like any media app (media volume controls it).
 13. Replay in the background or screen off does not keep playing sound.
 14. Airplane mode and a Bluetooth headset connecting or disconnecting mid-game do not crash; if audio breaks, the game goes on silent.

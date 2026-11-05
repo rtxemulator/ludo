@@ -15,10 +15,15 @@ import 'haptics.dart';
 
 /// Everything the game can make you hear.
 enum SfxEvent {
+  /// The die leaves the hand and tumbles through the air (0 to 420 ms of
+  /// the roll, until the first impact). No haptic.
+  diceThrow,
+
+  /// The three impacts on the table and the roll-out, from the first impact.
   diceRoll,
   diceSettle,
 
-  /// One hop step of a token. The only sound with no haptic.
+  /// One hop step of a token. No haptic.
   hop,
   land,
   capture,
@@ -69,6 +74,7 @@ List<double> hopSoundTimesMs({required int steps, required double stepMs}) =>
 
 /// Minimum time between two plays of the same event (ms).
 const Map<SfxEvent, double> sfxMinGapMs = {
+  SfxEvent.diceThrow: 300,
   SfxEvent.diceRoll: 300,
   SfxEvent.diceSettle: 100,
   SfxEvent.hop: 60,
@@ -98,6 +104,7 @@ class SfxSpread {
 
 /// Variation per event. Sounds that carry meaning barely vary.
 const Map<SfxEvent, SfxSpread> sfxVariation = {
+  SfxEvent.diceThrow: SfxSpread(pitch: 0.03, gain: 0.05),
   SfxEvent.diceRoll: SfxSpread(pitch: 0.03, gain: 0.05),
   SfxEvent.diceSettle: SfxSpread(pitch: 0.02, gain: 0.04),
   SfxEvent.hop: SfxSpread(pitch: 0.06, gain: 0.08),

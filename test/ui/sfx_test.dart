@@ -55,10 +55,14 @@ void main() {
       expect(sfxFor(HapticEvent.noMove), SfxEvent.illegal);
     });
 
-    test('hop is the only sound without a haptic', () {
+    test('hop and the dice throw are the only sounds without a haptic', () {
       final fromHaptics = HapticEvent.values.map(sfxFor).toSet();
       expect(fromHaptics, isNot(contains(SfxEvent.hop)));
-      expect({...fromHaptics, SfxEvent.hop}, SfxEvent.values.toSet());
+      expect(fromHaptics, isNot(contains(SfxEvent.diceThrow)));
+      expect(
+        {...fromHaptics, SfxEvent.hop, SfxEvent.diceThrow},
+        SfxEvent.values.toSet(),
+      );
     });
   });
 

@@ -432,6 +432,9 @@ class GameController extends ChangeNotifier {
     _diceImpactFired = false;
     message = null;
     phase = GamePhase.rolling;
+    // The die leaves the hand: the throw sound covers the flight, the table
+    // impacts follow at the first impact (tick).
+    feedback.sound(SfxEvent.diceThrow);
     notifyListeners();
   }
 

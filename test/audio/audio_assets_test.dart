@@ -11,9 +11,11 @@ import 'package:test/test.dart';
 const int budgetBytes = 600 * 1024;
 
 /// Expected length window per effect (ms), from docs/ludo-sound-themes.md
-/// section 2. The dice roll spans its three bounces (0, 230, 380 ms).
+/// section 2. The dice throw covers the flight (420 ms); the dice roll runs
+/// from the first impact to the settle click (about 500 ms).
 const Map<SfxEvent, (int, int)> windowsMs = {
-  SfxEvent.diceRoll: (380, 500),
+  SfxEvent.diceThrow: (300, 520),
+  SfxEvent.diceRoll: (380, 600),
   SfxEvent.diceSettle: (60, 130),
   SfxEvent.hop: (40, 100),
   SfxEvent.land: (80, 160),

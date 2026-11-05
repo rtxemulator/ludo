@@ -145,6 +145,46 @@ void main() {
       r.game.dispose();
     });
 
+    test('the throw sound starts the roll, the table impacts follow it',
+        () async {
+      final audio = await _Audio.ready();
+      var t = 0.0;
+      final game = GameController(
+        seed: 11,
+        now: () => t,
+        haptics: false,
+        audio: audio.service,
+      );
+      game.roll();
+      expect(audio.played, [SfxEvent.diceThrow], reason: 'at once, in the air');
+      for (var i = 0; i < 200 && game.phase == GamePhase.rolling; i++) {
+        t += 16;
+        audio.clock.advance(16);
+        game.tick();
+      }
+      expect(audio.played.take(3),
+          [SfxEvent.diceThrow, SfxEvent.diceRoll, SfxEvent.diceSettle]);
+      expect(audio.count(SfxEvent.diceThrow), 1);
+      game.dispose();
+    });
+
+    test('a quick roll still throws, but skips the table impacts', () async {
+      final audio = await _Audio.ready();
+      var t = 0.0;
+      final game = GameController(
+        seed: 11,
+        now: () => t,
+        haptics: false,
+        audio: audio.service,
+      );
+      game.roll();
+      game.quickRoll();
+      expect(audio.played, contains(SfxEvent.diceThrow));
+      expect(audio.played, isNot(contains(SfxEvent.diceRoll)));
+      expect(audio.played, contains(SfxEvent.diceSettle));
+      game.dispose();
+    });
+
     test('muted effects play nothing, hops included', () async {
       final r = await playAMove(muted: true);
       expect(r.audio.played, isEmpty);

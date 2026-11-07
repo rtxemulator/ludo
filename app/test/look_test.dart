@@ -445,7 +445,8 @@ void main() {
           mode: ThemeMode.dark,
         ),
       );
-      await tester.pump();
+      // MaterialApp animates the theme change; wait it out.
+      await tester.pump(const Duration(milliseconds: 400));
       final slateDark = LudoPalette.of(PaletteId.slate, Brightness.dark);
       expect(
         _tablePalettes(tester).every((p) => identical(p, slateDark)),
@@ -514,6 +515,9 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
+      // Built is not visible: bring the tile inside the card before tapping.
+      await tester.ensureVisible(_tile(PaletteId.slate));
+      await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(_tile(PaletteId.slate));
       await tester.pump();
       expect(settings.paletteId, PaletteId.slate);

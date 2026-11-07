@@ -142,9 +142,93 @@ Chat A does not hook it into `GameController`.
   - **Classic** is today's look (warm linen felt, wooden frame, red / green / yellow / blue).
   - **Slate** is a cool, quieter look: blue-grey felt and a darker frame, seat colours slightly desaturated.
   - **High Contrast** has strong value contrast between board, cells, lines and tokens, black or white text, saturated seat colours, and shape cues that do not rely on colour alone where the painters allow it. Target: WCAG AA contrast (4.5:1) for text and 3:1 for the board lines and token outlines.
-  - Hex values are settled in chat C, not here.
+  - Hex values are final (chat C); the tables below list them. The single source is `lib/ui/core/palette_spec.dart` (pure Dart: packed ARGB ints and the Material seed per palette); `LudoPalette.of(PaletteId, Brightness)` in `app/lib/ui/theme/palette.dart` builds the Flutter colours from it and always returns the same shared instance, so painters compare palettes by identity. `ludoTheme(id, brightness)` (`app/lib/ui/theme/app_theme.dart`) builds the `ThemeData` with `ColorScheme.fromSeed`, once per palette and brightness.
+  - High Contrast seats are the Okabe-Ito set (vermillion, bluish green, yellow, blue) so the names Red / Green / Yellow / Blue stay true. In the light variant the yellow is a deeper gold (`#B38F00`) and the other seats are the plain Okabe-Ito shades, because every seat must reach 3:1 against the white cell; the dark variant uses brighter shades of the same four hues for the same reason.
 - **Theme mode:** `ThemeMode.system` (default), `light`, `dark`. The app's `MaterialApp` uses `themeMode`; the table picks the light or dark `LudoPalette` of the chosen palette from the effective brightness.
-- **Presentation only:** theme mode and palette live in `GameSettings` and `shared_preferences`. No change in the save format, the engine, the storage or the AI. A replay or a resumed game looks the way the settings say now, not the way it looked when it was played.
+- **Presentation only:** theme mode and palette live in `GameSettings` and `shared_preferences`. No change in the save format, the engine, the storage or the AI. A replay or a resumed game looks the way the settings say now, not the way it looked when it was played. Saved games and replays follow the current setting: the palette and theme mode are read when the table is built, nothing about them is written to a save, and switching them in the in-game menu repaints the open table (or replay) at once.
+
+
+### Hex values
+
+Packed colours are opaque; `seat` is Red, Green, Yellow, Blue.
+
+**Classic** (Material seed #6750A4)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#F3F1EC` | `#121212` |
+| board | `#FAF7F0` | `#1E1E22` |
+| cell | `#FFFFFF` | `#2B2B31` |
+| cellLine | `#CFC8BA` | `#3D3D45` |
+| yardInner | `#FFFFFF` | `#2B2B31` |
+| text | `#22201C` | `#EDEDED` |
+| seat Red | `#E53935` | `#E53935` |
+| seat Green | `#43A047` | `#43A047` |
+| seat Yellow | `#FDD835` | `#FDD835` |
+| seat Blue | `#1E88E5` | `#1E88E5` |
+| feltCentre | `#E9E2D3` | `#2A2D30` |
+| feltEdge | `#CDC3AE` | `#111214` |
+| woodLight | `#A06F42` | `#8C5E36` |
+| woodDark | `#6E4726` | `#583820` |
+| woodGrainDark | `#3B2210` | `#2E1A0B` |
+| woodGrainLight | `#C99562` | `#B0804F` |
+
+**Slate** (Material seed #546E7A)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#E4E9EF` | `#0E1217` |
+| board | `#EEF2F6` | `#1A212A` |
+| cell | `#FAFBFD` | `#242D38` |
+| cellLine | `#B4BECB` | `#3A4757` |
+| yardInner | `#FAFBFD` | `#242D38` |
+| text | `#1D2530` | `#E4EAF1` |
+| seat Red | `#C9524E` | `#D1625D` |
+| seat Green | `#4E9A5B` | `#5BA867` |
+| seat Yellow | `#DDBF4A` | `#E3C752` |
+| seat Blue | `#4A86C2` | `#5A93CF` |
+| feltCentre | `#B9C5D3` | `#2A3644` |
+| feltEdge | `#93A2B5` | `#10151B` |
+| woodLight | `#5E5047` | `#4A3E36` |
+| woodDark | `#3C322C` | `#2E2621` |
+| woodGrainDark | `#211A15` | `#17120E` |
+| woodGrainLight | `#8A7767` | `#6F5E50` |
+
+**High Contrast** (Material seed #0072B2, scheme contrast level 1.0)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#FFFFFF` | `#000000` |
+| board | `#EDEDED` | `#0A0A0A` |
+| cell | `#FFFFFF` | `#2A2A2A` |
+| cellLine | `#111118` | `#F5F3EA` |
+| yardInner | `#FFFFFF` | `#2A2A2A` |
+| text | `#000000` | `#FFFFFF` |
+| seat Red | `#D55E00` | `#FF6B2B` |
+| seat Green | `#009E73` | `#00C08B` |
+| seat Yellow | `#B38F00` | `#F0E442` |
+| seat Blue | `#0072B2` | `#4DA3E0` |
+| feltCentre | `#F2F0E6` | `#1A1A1A` |
+| feltEdge | `#D9D5C4` | `#000000` |
+| woodLight | `#6B4423` | `#8C5E36` |
+| woodDark | `#3A2210` | `#583820` |
+| woodGrainDark | `#1E0F05` | `#2E1A0B` |
+| woodGrainLight | `#9A6A3E` | `#B0804F` |
+
+### Contrast (WCAG ratios)
+
+Checked by `test/ui/palette_contrast_test.dart` (pure Dart, prints this table). Forced: text against background and board at 4.5:1 in every palette; in High Contrast also `cellLine` against board and cell, every seat colour against the cell and text against the felt at 3:1 or better (4.5:1 for the text). Classic and Slate are reported, not forced (their seat colours and lines are soft on purpose; Classic is the look from before this milestone).
+
+| Palette | text / background | text / board | line / board | Red / cell | Green / cell | Yellow / cell | Blue / cell |
+|---|---|---|---|---|---|---|---|
+| Classic light | 14.41 | 15.20 | 1.55 | 4.23 | 3.30 | 1.40 | 3.68 |
+| Classic dark | 16.00 | 14.19 | 1.54 | 3.33 | 4.26 | 10.08 | 3.82 |
+| Slate light | 12.65 | 13.73 | 1.67 | 4.23 | 3.33 | 1.74 | 3.70 |
+| Slate dark | 15.51 | 13.39 | 1.71 | 3.73 | 4.80 | 8.33 | 4.32 |
+| High Contrast light | 21.00 | 17.94 | 16.06 | 3.87 | 3.42 | 3.07 | 5.19 |
+| High Contrast dark | 21.00 | 19.80 | 17.81 | 5.05 | 6.09 | 10.85 | 5.22 |
+
+The soft lines and the light yellow of Classic and Slate are why High Contrast exists. Known limitation: the die pips are white-ish on every seat colour, which is weakest on the bright yellow of the dark High Contrast palette; it is a device-review item.
 
 ---
 
@@ -172,7 +256,7 @@ Loading is tolerant: a missing, mistyped or unknown value (a bool where a string
 
 ## 8. Settings screen and menu
 
-- **Shared panel** (`SettingsPanel`, `app/lib/ui/settings/settings_panel.dart`): the rows that used to live inside the menu page (Haptics, Reduce motion, UI orientation, Auto-rotate menu to active seat, Frame timing overlay), as a scrollable list bound to a `GameSettings`. Chat B added a **Sound** section (header, Sound effects switch and slider, Music switch and slider; keys `sfx-switch`, `sfx-volume`, `music-switch`, `music-volume`) between Auto-rotate and Frame timing overlay; a slider is greyed out while its switch is off, and changes apply live through `AudioService.bind` and persist through `SettingsStore`. Chat C adds the Look rows to this one panel, so both entry points get them.
+- **Shared panel** (`SettingsPanel`, `app/lib/ui/settings/settings_panel.dart`): the rows that used to live inside the menu page (Haptics, Reduce motion, UI orientation, Auto-rotate menu to active seat, Frame timing overlay), as a scrollable list bound to a `GameSettings`. Chat B added a **Sound** section (header, Sound effects switch and slider, Music switch and slider; keys `sfx-switch`, `sfx-volume`, `music-switch`, `music-volume`) between Auto-rotate and Frame timing overlay; a slider is greyed out while its switch is off, and changes apply live through `AudioService.bind` and persist through `SettingsStore`. Chat C added the **Look** section to this one panel, so both entry points have it: a header, a **Theme** row (System / Light / Dark, `SegmentedButton`, key `theme-mode`) and a **Palette** row (three tiles, keys `palette-classic`, `palette-slate`, `palette-highContrast`, each with a swatch drawn by `PaletteSwatchPainter` in the palette's own colours for the current brightness: the board with its cross of cells and the four yards in the seat colours, plus the name; the selected tile has a thick outline and the selected semantics flag). It sits after Sound and before Frame timing overlay, so the rows above it keep their places and the Sound tests are unchanged. Changes apply live (`MaterialApp` rebuilds when the theme mode or palette changes, the table when the palette changes) and persist through `SettingsStore`.
 - **`SettingsScreen`** (`app/lib/ui/settings/settings_screen.dart`): a normal route with an app bar and the panel. Home has a gear button (key `home-settings`) that opens it.
 - **In-game menu:** the Settings entry shows the same panel inside the turned menu card, with its own back arrow.
 - **Menu entries now:** New game, Players & rules (when available), Settings, Close. No Rules item.
@@ -188,7 +272,7 @@ Loading is tolerant: a missing, mistyped or unknown value (a bool where a string
   2. `flutter_soloud` as the only new dependency; an `AudioService` in `app/lib/audio/` that binds `SfxPlayer` to the engine (lazy init, silent failures, no audio focus), plus a music voice with 400 ms fades.
   3. Hook the player into the haptic call sites (one place that plays haptic and sound together), the `hop` call site, replay speed gating, music on the table and the replay screen only, lifecycle pause.
   4. Sound rows in the shared panel (Sound effects on/off and volume, Music on/off and volume); widget and unit tests with a fake backend.
-- **Chat C (look, polish, PR):**
+- **Chat C (look, polish), done; the PR to main waits for the device review:**
   1. Settle the palette hex values and write them into section 6.
   2. `PaletteId` palettes (light and dark), theme mode wired into `MaterialApp`, the table painters reading the chosen palette, `ColorScheme` per palette.
   3. Look rows in the shared panel (Theme mode, Palette with a small preview).
@@ -198,7 +282,7 @@ Each chat starts by reading `CLAUDE.md` and this file; no re-planning.
 
 ---
 
-## 10. Device checklist (stubs)
+## 10. Device checklist
 
 Chat A (settings and menu, no sound yet):
 
@@ -227,4 +311,17 @@ Chat B (sound). Use the release or profile APK from CI; effects volume 80 %, mus
 14. Airplane mode and a Bluetooth headset connecting or disconnecting mid-game do not crash; if audio breaks, the game goes on silent.
 15. Settings persist across a full restart (switches and both volumes).
 
-Chat C (to fill in): each palette in light and dark on the table, the menu and the screens; theme mode System follows the phone; High Contrast legibility check outdoors; nothing in a saved game or replay changes with the look.
+Chat C (look). Use the release or profile APK from CI. Check each palette in light and dark unless a step says otherwise.
+
+1. Settings (from Home): a Look section after Sound with Theme (System / Light / Dark) and Palette (Classic, Slate, High Contrast). Each palette tile shows a small board with four seat colours; the selected one has a thick outline. Tapping changes the whole app at once (app bar, switches, tiles), with no restart.
+2. Theme System follows the phone: switch the phone between light and dark while Ludo is open (and from the notification shade); the app follows. Light and Dark force it regardless of the phone.
+3. Table, Classic, light and dark: unchanged from before this milestone (board, yards, wood frame, felt, tokens, dice, docks).
+4. Table, Slate, light and dark: blue-grey felt, a darker frame, seat colours quieter than Classic but still easy to tell apart (Red and Yellow, Green and Blue); lines and tokens readable; nothing glaring.
+5. Table, High Contrast, light and dark: board, cells, lines and tokens clearly separated; the lines are black (light) or off-white (dark), not grey on grey; the four seats are vermillion, bluish green, yellow and blue and each still reads as Red, Green, Yellow, Blue. Try a grayscale or colour-blind filter if the phone has one: the four seats must stay distinguishable by lightness and by their yard positions. Look at the die pips on the yellow die (known weakest point) and at the menu button icon on the felt.
+6. High Contrast outdoors in bright light: the table and tokens are legible; note anything that washes out.
+7. In a game, open the menu, Settings, Look and switch palette and Theme mode: the table repaints at once with no hitch (turn on Frame timing overlay to see), the game state, dice and animations carry on, and no leftover colours stay behind (glows, shadows, halos, toasts, rank badges, confetti, the illegal-tap ring is the palette's Red).
+8. Setup (New game): the seat map and the seat tiles use the chosen palette. Home, Saved Games and Settings screens look right and readable in all three palettes, light and dark.
+9. A saved game and a replay look the way the settings say now: start a game in Classic, leave, switch to Slate, Continue it and Watch replay: both are Slate. Nothing else about the game, the list or the replay changes (same moves, same results).
+10. Settings persist across a full restart (force stop and reopen): theme mode and palette are as left.
+11. Haptics (shipped in M2, verify only): still felt on roll, landing, capture, home and win; the Haptics switch silences them; they are unaffected by the look.
+12. Cold start feels the same as before; nothing looks wrong on the first frame (no flash of another palette).

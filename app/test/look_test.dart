@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsProperties;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo/storage/storage.dart';
 import 'package:ludo/ui/core/palette_spec.dart';

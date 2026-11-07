@@ -1,18 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:ludo/ui/core/motion_spec.dart';
+import 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
 import 'package:ludo/ui/core/sfx.dart' show clampVolume;
 import 'package:ludo/ui/core/table_layout.dart' show UiOrientation;
 
 export 'package:flutter/material.dart' show ThemeMode;
+export 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
 export 'package:ludo/ui/core/table_layout.dart' show UiOrientation;
 
 /// Reduce-motion override: follow the system, or force it on / off.
 enum ReduceMotion { system, on, off }
-
-/// The look of the table and the screens (docs/ludo-sound-themes.md section
-/// 6). The stored value is the enum name.
-enum PaletteId { classic, slate, highContrast }
 
 /// Default effects volume.
 const double defaultSfxVolume = 0.8;

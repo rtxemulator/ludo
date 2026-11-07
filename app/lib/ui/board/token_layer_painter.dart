@@ -305,7 +305,8 @@ class TokenLayerPainter extends CustomPainter {
           color = palette.seatLight(r.seat);
           width = 0.07;
         case FxKind.nudge:
-          color = _nudgeRed;
+          // The "not allowed" ring is the Red seat's colour of the palette.
+          color = palette.seat[0];
           width = 0.06;
       }
       _ring
@@ -330,8 +331,6 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
   }
-
-  static const Color _nudgeRed = Color(0xFFE53935);
 
   /// Centred contact core + penumbra. In the air the shadow widens, fades and
   /// drifts away from the board centre (radially symmetric parallax).

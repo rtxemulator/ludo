@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ludo/engine/ludo_engine.dart' show EndMode, RulesConfig;
 import 'package:ludo/seats/seats.dart';
 
+import '../../settings/game_settings.dart';
 import '../theme/palette.dart';
 import 'seat_map.dart';
 
@@ -24,7 +25,12 @@ class SetupScreen extends StatefulWidget {
     this.initial,
     this.onChanged,
     required this.onPlay,
+    this.settings,
   });
+
+  /// The app's settings: the seat colours follow its palette (Classic when
+  /// omitted).
+  final GameSettings? settings;
 
   /// The setup to start from (four humans, classic rules when omitted).
   final MatchSetup? initial;
@@ -67,9 +73,18 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final palette =
-        brightness == Brightness.dark ? LudoPalette.dark : LudoPalette.light;
+    final settings = widget.settings;
+    if (settings == null) {
+      return _scaffold(context, PaletteId.classic);
+    }
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) => _scaffold(context, settings.paletteId),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, PaletteId paletteId) {
+    final palette = LudoPalette.of(paletteId, Theme.of(context).brightness);
     final problems = _setup.problems();
     return Scaffold(
       appBar: AppBar(title: const Text('New game')),

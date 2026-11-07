@@ -51,8 +51,7 @@ class _ReplayScreenState extends State<ReplayScreen>
   late final GameSettings _settings = widget.settings ?? GameSettings();
   bool _systemReduced = false;
   late final Ticker _ticker;
-  Brightness? _shaderBrightness;
-  TokenShaders? _shaders;
+  final TokenShadersCache _shaders = TokenShadersCache();
   VoidCallback? _unbindAudio;
 
   @override
@@ -123,36 +122,39 @@ class _ReplayScreenState extends State<ReplayScreen>
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final palette =
-        brightness == Brightness.dark ? LudoPalette.dark : LudoPalette.light;
-    if (_shaders == null || _shaderBrightness != brightness) {
-      _shaders = TokenShaders(palette);
-      _shaderBrightness = brightness;
-    }
-    return Scaffold(
-      backgroundColor: palette.feltEdge,
-      body: Column(
-        children: [
-          Expanded(
-            // The controls take the bottom inset; the table keeps the rest.
-            child: MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_replay, _replay.game, _settings]),
-                builder: (context, _) => TableView(
-                  game: _replay.game,
-                  settings: _settings,
-                  palette: palette,
-                  shaders: _shaders!,
-                  onClose: () => Navigator.of(context).maybePop(),
+    // Same look as the game: the settings' palette, live.
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) {
+        final palette = LudoPalette.of(_settings.paletteId, brightness);
+        final shaders = _shaders.forPalette(palette);
+        return Scaffold(
+          backgroundColor: palette.feltEdge,
+          body: Column(
+            children: [
+              Expanded(
+                // The controls take the bottom inset; the table keeps the rest.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeBottom: true,
+                  child: AnimatedBuilder(
+                    animation:
+                        Listenable.merge([_replay, _replay.game, _settings]),
+                    builder: (context, _) => TableView(
+                      game: _replay.game,
+                      settings: _settings,
+                      palette: palette,
+                      shaders: shaders,
+                      onClose: () => Navigator.of(context).maybePop(),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              ReplayControls(replay: _replay, notice: _notice),
+            ],
           ),
-          ReplayControls(replay: _replay, notice: _notice),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -73,8 +73,7 @@ class _GameScreenState extends State<GameScreen>
       widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
   bool _systemReduced = false;
   late final Ticker _ticker;
-  Brightness? _shaderBrightness;
-  TokenShaders? _shaders;
+  final TokenShadersCache _shaders = TokenShadersCache();
   VoidCallback? _unbindAudio;
 
   @override
@@ -135,38 +134,41 @@ class _GameScreenState extends State<GameScreen>
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final palette =
-        brightness == Brightness.dark ? LudoPalette.dark : LudoPalette.light;
-    if (_shaders == null || _shaderBrightness != brightness) {
-      _shaders = TokenShaders(palette);
-      _shaderBrightness = brightness;
-    }
-    return Scaffold(
-      backgroundColor: palette.feltEdge,
-      // The table handles the system insets itself so the felt runs edge to
-      // edge.
-      body: AnimatedBuilder(
-        animation: Listenable.merge([_game, _settings]),
-        builder: (context, _) => TableView(
-          game: _game,
-          settings: _settings,
-          palette: palette,
-          shaders: _shaders!,
-          onReplay: widget.onReplay == null
-              ? null
-              : () {
-                  final save = _game.save;
-                  if (save != null) {
-                    widget.onReplay!(save);
-                  }
-                },
-          // Back to the setup screen, when this screen was opened from it.
-          onSetup: widget.onSetup ??
-              (Navigator.of(context).canPop()
-                  ? () => Navigator.of(context).pop()
-                  : null),
-        ),
-      ),
+    // The palette follows the settings live: the outer builder rebuilds when
+    // the palette changes, and the shaders are rebuilt with it.
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) {
+        final palette = LudoPalette.of(_settings.paletteId, brightness);
+        final shaders = _shaders.forPalette(palette);
+        return Scaffold(
+          backgroundColor: palette.feltEdge,
+          // The table handles the system insets itself so the felt runs edge
+          // to edge.
+          body: AnimatedBuilder(
+            animation: Listenable.merge([_game, _settings]),
+            builder: (context, _) => TableView(
+              game: _game,
+              settings: _settings,
+              palette: palette,
+              shaders: shaders,
+              onReplay: widget.onReplay == null
+                  ? null
+                  : () {
+                      final save = _game.save;
+                      if (save != null) {
+                        widget.onReplay!(save);
+                      }
+                    },
+              // Back to the setup screen, when this screen was opened from it.
+              onSetup: widget.onSetup ??
+                  (Navigator.of(context).canPop()
+                      ? () => Navigator.of(context).pop()
+                      : null),
+            ),
+          ),
+        );
+      },
     );
   }
 }

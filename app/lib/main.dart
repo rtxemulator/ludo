@@ -17,6 +17,7 @@ import 'ui/replay/replay_screen.dart';
 import 'ui/screens/game_screen.dart';
 import 'ui/settings/settings_screen.dart';
 import 'ui/setup/setup_screen.dart';
+import 'ui/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,10 +71,16 @@ class _LudoAppState extends State<LudoApp> {
   VoidCallback? _stopSavingSettings;
   VoidCallback? _unbindAudio;
 
+  // The look the MaterialApp was built with: it is rebuilt only when one of
+  // these changes (not on every volume tick).
+  late ThemeMode _themeMode = _settings.themeMode;
+  late PaletteId _paletteId = _settings.paletteId;
+
   @override
   void initState() {
     super.initState();
     _stopSavingSettings = widget.settingsStore?.bind(_settings);
+    _settings.addListener(_onLook);
     final audio = widget.audio;
     if (audio != null) {
       _unbindAudio = audio.bind(_settings);
@@ -84,8 +91,19 @@ class _LudoAppState extends State<LudoApp> {
     }
   }
 
+  void _onLook() {
+    if (_themeMode != _settings.themeMode ||
+        _paletteId != _settings.paletteId) {
+      setState(() {
+        _themeMode = _settings.themeMode;
+        _paletteId = _settings.paletteId;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _settings.removeListener(_onLook);
     _unbindAudio?.call();
     unawaited(widget.audio?.dispose());
     _stopSavingSettings?.call();
@@ -103,6 +121,7 @@ class _LudoAppState extends State<LudoApp> {
           initial: _setup,
           onChanged: _remember,
           onPlay: _play,
+          settings: _settings,
         ),
       );
 
@@ -200,8 +219,9 @@ class _LudoAppState extends State<LudoApp> {
         title: 'Ludo',
         debugShowCheckedModeBanner: false,
         navigatorKey: _navigator,
-        theme: ThemeData(brightness: Brightness.light, useMaterial3: true),
-        darkTheme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+        theme: ludoTheme(_paletteId, Brightness.light),
+        darkTheme: ludoTheme(_paletteId, Brightness.dark),
+        themeMode: _themeMode,
         home: HomeScreen(
           library: _library,
           onPlay: _openSetup,

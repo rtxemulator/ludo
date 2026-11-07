@@ -93,3 +93,25 @@ class TokenShaders {
   /// Wide, light shadow around it.
   final Shader shadowPenumbra;
 }
+
+/// Keeps the [TokenShaders] of the palette in use. A new set is built when the
+/// palette changes (another palette or the other brightness), never per
+/// frame.
+class TokenShadersCache {
+  LudoPalette? _palette;
+  TokenShaders? _shaders;
+
+  /// How many times a set was built (tests).
+  int builds = 0;
+
+  /// The shaders of [palette]; palettes are shared instances, so identity is
+  /// the right comparison.
+  TokenShaders forPalette(LudoPalette palette) {
+    if (_shaders == null || !identical(_palette, palette)) {
+      _shaders = TokenShaders(palette);
+      _palette = palette;
+      builds++;
+    }
+    return _shaders!;
+  }
+}

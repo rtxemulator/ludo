@@ -1,9 +1,21 @@
+import 'dart:ui' show Brightness;
+
 import 'package:flutter/painting.dart';
+import 'package:ludo/ui/core/palette_spec.dart';
+
+export 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
 
 /// Display names of the four seats (clockwise from the top-left yard).
 const List<String> seatNames = ['Red', 'Green', 'Yellow', 'Blue'];
 
-/// Colours for the table, board, tokens and dice (light and dark variants).
+/// Colours for the table, board, tokens and dice. There is one per palette
+/// and brightness ([LudoPalette.of]); the hex values live in the pure-Dart
+/// `PaletteSpec` (so the contrast tests can read them) and are listed in
+/// docs/ludo-sound-themes.md section 6.
+///
+/// The instances are created once and shared, so a palette can be compared
+/// with `==` (identity): the painters' `shouldRepaint` and the shader cache
+/// rely on that.
 class LudoPalette {
   const LudoPalette({
     required this.background,
@@ -20,6 +32,22 @@ class LudoPalette {
     required this.woodGrainDark,
     required this.woodGrainLight,
   });
+
+  factory LudoPalette.fromSpec(PaletteSpec s) => LudoPalette(
+        background: Color(s.background),
+        board: Color(s.board),
+        cell: Color(s.cell),
+        cellLine: Color(s.cellLine),
+        yardInner: Color(s.yardInner),
+        text: Color(s.text),
+        seat: List<Color>.unmodifiable([for (final c in s.seat) Color(c)]),
+        feltCentre: Color(s.feltCentre),
+        feltEdge: Color(s.feltEdge),
+        woodLight: Color(s.woodLight),
+        woodDark: Color(s.woodDark),
+        woodGrainDark: Color(s.woodGrainDark),
+        woodGrainLight: Color(s.woodGrainLight),
+      );
 
   final Color background;
   final Color board;
@@ -41,46 +69,23 @@ class LudoPalette {
   final Color woodGrainDark;
   final Color woodGrainLight;
 
-  static const List<Color> _seats = [
-    Color(0xFFE53935),
-    Color(0xFF43A047),
-    Color(0xFFFDD835),
-    Color(0xFF1E88E5),
+  // Index: palette index * 2 (+ 1 for dark).
+  static final List<LudoPalette> _all = [
+    for (final id in PaletteId.values)
+      for (final dark in [false, true])
+        LudoPalette.fromSpec(PaletteSpec.of(id, dark: dark)),
   ];
 
-  static const LudoPalette light = LudoPalette(
-    background: Color(0xFFF3F1EC),
-    board: Color(0xFFFAF7F0),
-    cell: Color(0xFFFFFFFF),
-    cellLine: Color(0xFFCFC8BA),
-    yardInner: Color(0xFFFFFFFF),
-    text: Color(0xFF22201C),
-    seat: _seats,
-    // Warm linen.
-    feltCentre: Color(0xFFE9E2D3),
-    feltEdge: Color(0xFFCDC3AE),
-    woodLight: Color(0xFFA06F42),
-    woodDark: Color(0xFF6E4726),
-    woodGrainDark: Color(0xFF3B2210),
-    woodGrainLight: Color(0xFFC99562),
-  );
+  /// The palette [id] for a light or dark [brightness]. Always the same
+  /// instance for the same arguments.
+  static LudoPalette of(PaletteId id, Brightness brightness) =>
+      _all[id.index * 2 + (brightness == Brightness.dark ? 1 : 0)];
 
-  static const LudoPalette dark = LudoPalette(
-    background: Color(0xFF121212),
-    board: Color(0xFF1E1E22),
-    cell: Color(0xFF2B2B31),
-    cellLine: Color(0xFF3D3D45),
-    yardInner: Color(0xFF2B2B31),
-    text: Color(0xFFEDEDED),
-    seat: _seats,
-    // Dark neutral felt.
-    feltCentre: Color(0xFF2A2D30),
-    feltEdge: Color(0xFF111214),
-    woodLight: Color(0xFF8C5E36),
-    woodDark: Color(0xFF583820),
-    woodGrainDark: Color(0xFF2E1A0B),
-    woodGrainLight: Color(0xFFB0804F),
-  );
+  /// Classic, light.
+  static final LudoPalette light = of(PaletteId.classic, Brightness.light);
+
+  /// Classic, dark.
+  static final LudoPalette dark = of(PaletteId.classic, Brightness.dark);
 
   static const Color _white = Color(0xFFFFFFFF);
   static const Color _black = Color(0xFF000000);

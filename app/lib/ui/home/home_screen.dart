@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:ludo/storage/storage.dart';
 
 /// The start screen: Play, Continue last game (when there is one) and Saved
-/// Games. Settings stay in the in-game menu.
+/// Games, with a gear button in the corner for Settings (the in-game menu
+/// shows the same settings panel).
 ///
 /// The screen only asks what to open; the caller navigates. Each callback's
 /// future completes when the user comes back, and the screen then refreshes
@@ -14,6 +15,7 @@ class HomeScreen extends StatefulWidget {
     required this.onPlay,
     required this.onContinue,
     required this.onSavedGames,
+    required this.onSettings,
   });
 
   final SaveLibrary library;
@@ -26,6 +28,9 @@ class HomeScreen extends StatefulWidget {
 
   /// "Saved Games": open the list.
   final Future<void> Function() onSavedGames;
+
+  /// The gear button: open the settings screen.
+  final Future<void> Function() onSettings;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -66,55 +71,71 @@ class _HomeScreenState extends State<HomeScreen> {
     final last = _last;
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Ludo',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.displayMedium,
-                  ),
-                  const SizedBox(height: 40),
-                  FilledButton(
-                    key: const ValueKey('home-play'),
-                    onPressed: () => _run(widget.onPlay),
-                    child: const Text('Play'),
-                  ),
-                  if (last != null) ...[
-                    const SizedBox(height: 12),
-                    FilledButton.tonal(
-                      key: const ValueKey('home-continue'),
-                      onPressed: () => _run(() => widget.onContinue(last)),
-                      child: const Text('Continue last game'),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        last.name,
-                        key: const ValueKey('home-continue-name'),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    key: const ValueKey('home-saved'),
-                    onPressed: () => _run(widget.onSavedGames),
-                    child: const Text('Saved Games'),
-                  ),
-                ],
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: IconButton(
+                  key: const ValueKey('home-settings'),
+                  tooltip: 'Settings',
+                  icon: const Icon(Icons.settings),
+                  onPressed: widget.onSettings,
+                ),
               ),
             ),
-          ),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Ludo',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.displayMedium,
+                      ),
+                      const SizedBox(height: 40),
+                      FilledButton(
+                        key: const ValueKey('home-play'),
+                        onPressed: () => _run(widget.onPlay),
+                        child: const Text('Play'),
+                      ),
+                      if (last != null) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.tonal(
+                          key: const ValueKey('home-continue'),
+                          onPressed: () => _run(() => widget.onContinue(last)),
+                          child: const Text('Continue last game'),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            last.name,
+                            key: const ValueKey('home-continue-name'),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        key: const ValueKey('home-saved'),
+                        onPressed: () => _run(widget.onSavedGames),
+                        child: const Text('Saved Games'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

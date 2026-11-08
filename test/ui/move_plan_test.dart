@@ -103,6 +103,26 @@ void main() {
     expect(plan.poseOf(0, 0, plan.totalMs)!.pos, geo.trackCell(0));
   });
 
+  test('hop sounds: one per hop step, at take-off, before the landing', () {
+    final before = makeState(tokens: {
+      0: [2, -1, -1, -1],
+    }, dice: 3);
+    final plan = planFor(before, 0);
+    expect(plan.hopTimesMs, [0, 130, 260]);
+    // The last take-off is a whole step before the landing (impact).
+    expect(plan.hopTimesMs.last, plan.mover.impactMs - 130);
+  });
+
+  test('hop sounds: the yard exit is one hop, reduced motion has none', () {
+    final exit = planFor(makeState(dice: 6), 0);
+    expect(exit.hopTimesMs, [0]);
+
+    final before = makeState(tokens: {
+      0: [2, -1, -1, -1],
+    }, dice: 3);
+    expect(planFor(before, 0, spec: MotionSpec.reduced).hopTimesMs, isEmpty);
+  });
+
   test('capture: victim waits for the impact, then shakes and flies home', () {
     // Seat 0 token lands on abs 5 (not a safe square) where seat 1 sits.
     final before = makeState(tokens: {

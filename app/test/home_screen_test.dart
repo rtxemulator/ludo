@@ -12,6 +12,7 @@ Future<void> _pump(
   Future<void> Function()? onPlay,
   Future<void> Function(GameSave save)? onContinue,
   Future<void> Function()? onSavedGames,
+  Future<void> Function()? onSettings,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -20,6 +21,7 @@ Future<void> _pump(
         onPlay: onPlay ?? () async {},
         onContinue: onContinue ?? (_) async {},
         onSavedGames: onSavedGames ?? () async {},
+        onSettings: onSettings ?? () async {},
       ),
     ),
   );
@@ -100,6 +102,25 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-saved')));
     await tester.pumpAndSettle();
     expect((plays, lists), (1, 1));
+  });
+
+  testWidgets('the gear opens settings and is always there', (tester) async {
+    var opened = 0;
+    await _pump(tester, library, onSettings: () async => opened++);
+    expect(find.byKey(const ValueKey('home-settings')), findsOneWidget);
+    expect(find.byIcon(Icons.settings), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('home-settings')));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+  });
+
+  testWidgets('the gear stays when there is a game to continue',
+      (tester) async {
+    await store.put(playSave(id: 'one', at: day, name: 'One'));
+    await _pump(tester, library);
+    expect(_continue, findsOneWidget);
+    expect(find.byKey(const ValueKey('home-settings')), findsOneWidget);
   });
 
   testWidgets('coming back refreshes Continue', (tester) async {

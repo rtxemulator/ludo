@@ -26,6 +26,12 @@ class SettingsStore {
   static const String orientationKey = 'settings.orientation';
   static const String autoRotateKey = 'settings.autoRotateShared';
   static const String frameOverlayKey = 'settings.frameOverlay';
+  static const String sfxEnabledKey = 'settings.sfxEnabled';
+  static const String sfxVolumeKey = 'settings.sfxVolume';
+  static const String musicEnabledKey = 'settings.musicEnabled';
+  static const String musicVolumeKey = 'settings.musicVolume';
+  static const String themeModeKey = 'settings.themeMode';
+  static const String paletteIdKey = 'settings.paletteId';
   static const String setupKey = 'setup.last';
 
   /// The saved settings, defaults for anything missing or bad.
@@ -38,6 +44,12 @@ class SettingsStore {
           _enum(orientationKey, UiOrientation.values) ?? UiOrientation.table,
       autoRotateShared: _bool(autoRotateKey) ?? true,
       frameOverlay: _bool(frameOverlayKey) ?? false,
+      sfxEnabled: _bool(sfxEnabledKey) ?? true,
+      sfxVolume: _volume(sfxVolumeKey) ?? defaultSfxVolume,
+      musicEnabled: _bool(musicEnabledKey) ?? false,
+      musicVolume: _volume(musicVolumeKey) ?? defaultMusicVolume,
+      themeMode: _enum(themeModeKey, ThemeMode.values) ?? ThemeMode.system,
+      paletteId: _enum(paletteIdKey, PaletteId.values) ?? PaletteId.classic,
     );
   }
 
@@ -49,6 +61,12 @@ class SettingsStore {
       await _prefs.setString(orientationKey, settings.orientation.name);
       await _prefs.setBool(autoRotateKey, settings.autoRotateShared);
       await _prefs.setBool(frameOverlayKey, settings.frameOverlay);
+      await _prefs.setBool(sfxEnabledKey, settings.sfxEnabled);
+      await _prefs.setDouble(sfxVolumeKey, settings.sfxVolume);
+      await _prefs.setBool(musicEnabledKey, settings.musicEnabled);
+      await _prefs.setDouble(musicVolumeKey, settings.musicVolume);
+      await _prefs.setString(themeModeKey, settings.themeMode.name);
+      await _prefs.setString(paletteIdKey, settings.paletteId.name);
     } on Object catch (e) {
       debugPrint('Could not save settings: $e');
     }
@@ -95,6 +113,20 @@ class SettingsStore {
     } on Object {
       return null;
     }
+  }
+
+  /// A stored volume: any finite number (an int too) is kept, and
+  /// `GameSettings` clamps it into `0..1`; anything else is `null`.
+  double? _volume(String key) {
+    try {
+      final value = _prefs.get(key);
+      if (value is num && value.isFinite) {
+        return value.toDouble();
+      }
+    } on Object {
+      return null;
+    }
+    return null;
   }
 
   T? _enum<T extends Enum>(String key, List<T> values) {

@@ -17,7 +17,10 @@ import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/storage/storage.dart';
 import 'package:ludo/ui/core/revert_plan.dart';
+import 'package:ludo/ui/core/sfx.dart';
 
+import '../audio/audio_service.dart';
+import '../audio/game_feedback.dart';
 import '../haptics/haptics_service.dart';
 
 /// Where the hot-seat game currently is.
@@ -47,6 +50,7 @@ class GameController extends ChangeNotifier {
     double Function()? now,
     bool haptics = true,
     HapticsService? hapticsService,
+    AudioService? audio,
     AiTurnDriver? aiDriver,
     SaveWriteQueue? saves,
     DateTime Function()? wallClock,
@@ -58,7 +62,10 @@ class GameController extends ChangeNotifier {
         _ai = aiDriver ?? AiTurnDriver(),
         _saves = saves,
         _wall = wallClock ?? DateTime.now,
-        feedback = hapticsService ?? HapticsService() {
+        feedback = GameFeedback(
+          haptics: hapticsService ?? HapticsService(),
+          audio: audio,
+        ) {
     feedback.enabled = haptics;
     if (resumeFrom == null || !resume(resumeFrom)) {
       newGame(seed: seed);
@@ -163,7 +170,7 @@ class GameController extends ChangeNotifier {
 
   /// Haptic feedback (native channel); `feedback.enabled` is the global
   /// toggle.
-  final HapticsService feedback;
+  final GameFeedback feedback;
 
   MotionSpec _spec = MotionSpec.standard;
 
@@ -265,6 +272,9 @@ class GameController extends ChangeNotifier {
   double _autoMoveAtMs = 0;
   GameState? _after;
   bool _impactFired = false;
+
+  // How many of the plan's hop sounds have played (one per hop step).
+  int _hopsFired = 0;
   bool _diceImpactFired = false;
   int _rollCount = 0;
 
@@ -422,6 +432,9 @@ class GameController extends ChangeNotifier {
     _diceImpactFired = false;
     message = null;
     phase = GamePhase.rolling;
+    // The die leaves the hand: the throw sound covers the flight, the table
+    // impacts follow at the first impact (tick).
+    feedback.sound(SfxEvent.diceThrow);
     notifyListeners();
   }
 
@@ -756,6 +769,11 @@ class GameController extends ChangeNotifier {
       }
     } else if (phase == GamePhase.moving) {
       final t = now - planStartMs;
+      final hops = plan!.hopTimesMs;
+      while (_hopsFired < hops.length && t >= hops[_hopsFired]) {
+        _hopsFired++;
+        feedback.sound(SfxEvent.hop);
+      }
       if (!_impactFired && t >= plan!.mover.impactMs) {
         _impactFired = true;
         feedback.play(
@@ -997,6 +1015,7 @@ class GameController extends ChangeNotifier {
     _after = after;
     planStartMs = start;
     _impactFired = false;
+    _hopsFired = 0;
     legal = const [];
     phase = GamePhase.moving;
     notifyListeners();
@@ -1076,6 +1095,8 @@ class GameController extends ChangeNotifier {
   /// over shows its rank badges, without confetti or a haptic.
   void replayShow(GameState shown, {Map<int, int> rolls = const {}}) {
     assert(_replay, 'replayShow is for replay controllers');
+    // A scrub or a jump plays nothing, not even a cue still waiting.
+    feedback.cancelSounds();
     state = shown;
     _resetTable();
     rollerSeat = shown.currentSeat;

@@ -1,0 +1,327 @@
+# Ludo Sound, Themes & Settings (Milestone 6)
+
+Design of the sound effects, the music, the palettes, the theme mode and the settings screen. Chat A lays the foundations (this doc, the settings model, the shared settings panel, the pure sound core) and adds no audio plugin; chat B builds the audio (assets and `flutter_soloud`); chat C builds the look (palettes) and finishes the milestone.
+
+Related: [[ludo-roadmap]] (milestone 6), [[ludo-ui-ux]] (section 7 effects, section 8 menu and settings, section 9 haptics), [[ludo-saves]] (settings persistence, replay viewer), [[ludo-blueprint]] (section 10, audio architecture).
+
+---
+
+## 1. Decisions (approved)
+
+- **Assets.** Sounds are synthesized by a committed script into Ogg Opus, at most 600 KB in total (chat B). The script is the source of truth; the `.opus` files are build output that is committed with it.
+- **Sound set.** Dice throw, dice roll, dice settle, hop, land, capture, home, six, win, illegal/no-move and select. They are placed on the existing haptic call sites (section 2).
+- **Defaults.** Effects on at 80 %, music off at 40 %.
+- **Music.** Plays only on the table and replay screens, with 400 ms fades in and out, and pauses when the app goes to the background.
+- **Replay.** Effects play at 1x and are silent at 2x and 4x. Music follows the normal music rules.
+- **Runtime.** Audio initialises lazily after the first frame. Failures are silent (no audio is a valid state, never an error dialog). No audio focus is taken, so the user's own music or podcast keeps playing. Pitch and volume variation uses its own `Random`, never the engine's `rngState`.
+- **Looks.** Three palettes, Classic, Slate and High Contrast, each in a light and a dark variant. Theme mode is System / Light / Dark and defaults to System; the palette defaults to Classic. Theme and palette are presentation only: no save-format change, nothing in `GameSave`, `lib/engine/`, `lib/storage/` or `lib/ai/`.
+- **Settings screen.** One shared settings panel is used by both the Home screen (`SettingsScreen`, reached from a gear button) and the in-game menu.
+- **Dependencies.** The only new dependency is `flutter_soloud`, added in chat B. Chat A and chat C add none. No raster assets.
+- **Size.** Out of scope until Milestone 7 (the audio assets are capped by the 600 KB limit above and nothing else is optimised now).
+- **Rules item removed.** The in-game menu loses its "Rules" item and page. Banked rolls stays in Players & rules (the setup screen); `GameController.setBankedRolls` stays.
+
+---
+
+## 2. Sound catalogue
+
+Every sound sits on a haptic call site in `GameController` (`feedback.play(HapticEvent.x)`), except `hop` and `diceThrow`, which have no haptic. `sfxFor(HapticEvent)` in `lib/ui/core/sfx.dart` is the mapping. The player that bundles haptic and sound (chat B) calls both from the same place, so the two can never drift apart.
+
+| Sound (`SfxEvent`) | Haptic event | Call site | Character | Duration |
+|---|---|---|---|---|
+| `diceThrow` | none | `roll()`, the moment the die leaves the hand (pop-in, 0 ms) | the die in the air until the first impact: a quick rattle in the hand, then an airy whoosh that opens and closes and flutters at the tumble rate | 420 ms |
+| `diceRoll` | `diceImpact` | `tick`, first dice impact (420 ms into the roll) | three clacks of a die on a wooden table on the bounce times (420, 650, 800 ms), each lighter than the last, small skitters in between and a roll-out of fading ticks until the settle | about 510 ms |
+| `diceSettle` | `diceSettle` | `_finishRoll`, `_finishBankedRoll` (face locks, 920 ms) | one dry click, the die has stopped | about 90 ms |
+| `hop` | none | one per hop step of a move (`hopStepMs` 130 ms), hooked in chat B | soft short pluck, light and wooden | about 70 ms |
+| `land` | `tokenLand` | `tick`, move impact, a plain landing | pawn set down on the board, a muted tock | about 120 ms |
+| `capture` | `capture` | `tick`, move impact with victims | heavier knock plus a short downward whoosh for the victim sent home | about 350 ms |
+| `home` | `home` | `tick`, move impact on the finish pocket | three rising bell notes (a major triad), warm, not shrill | about 500 ms |
+| `six` | `six` | after `diceSettle` of a 6 (80 ms later, like the haptic) | a bright two-note chime, a "lucky" accent over the settle click | about 260 ms |
+| `win` | `win` | `tick`, entering `gameOver` | short rising fanfare, resolves on a held chord | about 1800 ms |
+| `illegal` | `illegal`, `noMove` | illegal tap, bank shake, "No move", "Three sixes", "Turn undone" | a low double tick, flat and unhappy but quiet | about 160 ms |
+| `select` | `select` | token or tray chip selected, variants prompt, formed blockade | a tiny high tick | about 40 ms |
+
+Notes:
+
+- `capture`, `home`, a formed blockade (`select`) and a plain landing share the one call site of the move impact; exactly one of them plays, as with the haptic.
+- `noMove` maps to `illegal` on purpose: one "that did not work" sound for a refused tap and for a roll with no move. The toast already tells the two apart.
+- Total length of the set is about 3.9 s; at 48 kbps mono Opus this is far below the 600 KB cap (section 3).
+
+### Rate limits and variation (`lib/ui/core/sfx.dart`)
+
+A per-event minimum gap stops a burst from smearing (a sound that fires again before the first has ended just muddies). Gaps in ms: `diceThrow` 300, `diceRoll` 300, `diceSettle` 100, `hop` 60, `land` 80, `capture` 150, `home` 200, `six` 200, `win` 1500, `illegal` 120, `select` 40.
+
+Variation makes repeated sounds feel less mechanical: each cue gets a playback-rate factor `1 +/- pitch` and a gain factor `1 +/- gain` drawn from the player's own `Random`. `hop` and `land` vary the most (pitch 6 %, gain 8 %), `diceRoll` and `select` a little (3 %, 5 %), `win`, `six`, `home`, `capture` and `illegal` almost not at all (0-2 %), because those carry meaning.
+
+---
+
+## 3. Asset spec
+
+- **Format:** Ogg Opus, mono, 48 kHz, about 48 kbps (voice-like VBR is fine). Music: stereo is allowed, 64 kbps.
+- **Budget:** at most 600 KB for all sound and music assets together (the effects are under 100 KB at the lengths above; the rest is the music loop).
+- **Generator (built in chat B):** `tool/audio/generate.py`, plain Python 3 with the standard library (`wave`, `math`, `random`, `array`) plus the `opusenc` command line encoder (`pkg install -y opus-tools` in Termux). Every sound is synthesized from oscillators, noise and envelopes; every random draw uses a fixed seed (`zlib.crc32` of the sound's name, a constant for the music) and `opusenc` gets a fixed serial, so the same script gives the same audio. No samples from anywhere, so nothing to license (blueprint section 10).
+- **Location:** `app/assets/audio/<SfxEvent name>.opus` for the eleven effects and `music.opus`, registered as the `assets/audio/` folder in `app/pubspec.yaml`. Only audio is added there; there are still no raster assets. The file name is `sfxAssetFile(event)` in `sfx.dart`.
+- **Levels:** every effect is normalised to the same perceived loudness (about -16 LUFS integrated for the short ones, peak below -1 dBFS), so the 80 % default is comfortable and one volume slider is enough. Music is about 6 dB below the effects at the same slider value.
+- **Music:** one seamless loop of 60 to 120 s, soft, nothing that fights the dice sounds. Built (second version, replacing the first ambient pad loop): 60 s, stereo, 64 kbps constrained VBR (plain VBR overshot to 645 KB); light and playful, C major, 96 BPM, 24 bars: a soft kalimba melody over an eighth-note arpeggio, a round bass on beats 1 and 3 and a very quiet pad, in three 8-bar sections (C Am F G, then F G C Am with the melody doubled an octave down and a descending arpeggio, then C Am F G); the last chord (G) leads back to the first. Every note tail and pad window wraps around the end and every pad oscillator has a whole number of cycles per loop, so the loop is seamless before encoding. `AudioService` plays it at `musicGainBelowEffects` (0.5, -6 dB) times the slider, because the file itself is normalised like an effect.
+
+### Generator usage and what it made
+
+```
+python3 tool/audio/generate.py                       # everything (music takes about 2 min on a phone)
+python3 tool/audio/generate.py --only capture        # one effect, or "music"
+python3 tool/audio/generate.py --keep-wav DIR        # keep the WAV files
+python3 tool/audio/generate.py --out DIR             # another output folder
+```
+
+It prints one line per file (duration, size, LUFS, peak) and the total. Loudness is measured with ITU-R BS.1770 K-weighting; an effect is measured over its sound only (10 ms blocks within 30 dB of the loudest), the music over the whole loop; a soft limiter keeps peaks under -1 dBFS.
+
+| File | Duration | Size |
+|---|---|---|
+| `diceThrow.opus` | 420 ms (the die in the air) | 3,396 B |
+| `diceRoll.opus` | 510 ms (three clacks at 0, 230, 380 ms, then the roll-out) | 3,139 B |
+| `diceSettle.opus` | 100 ms | 2,033 B |
+| `hop.opus` | 70 ms | 1,683 B |
+| `land.opus` | 120 ms | 1,934 B |
+| `capture.opus` | 350 ms | 3,028 B |
+| `home.opus` | 520 ms | 5,357 B |
+| `six.opus` | 260 ms | 3,655 B |
+| `win.opus` | 1,800 ms | 15,650 B |
+| `illegal.opus` | 160 ms | 2,574 B |
+| `select.opus` | 40 ms | 1,109 B |
+| `music.opus` | 60 s stereo | 488,685 B |
+| **Total** | | **532,243 B (520 KB of 600 KB)** |
+
+`test/audio/audio_assets_test.dart` (pure Dart, runs in the engine CI job) keeps it honest: every `SfxEvent` has a file, the folder holds nothing else, the total stays under 600 KB, each file is Ogg Opus with the right channel count and a length inside the window of section 2, the music is 60 to 120 s, and `pubspec.yaml` registers the folder.
+
+### Package
+
+`flutter_soloud` **5.2.2**, pinned exactly (Dart >= 3.11, Flutter >= 3.41). CI uses the stable Flutter channel unpinned; its last run resolved to Flutter 3.47.9. 5.2.2 is the latest release and the SDK constraint is met. It plays Ogg Opus through prebuilt Xiph libraries fetched by its native build hook; a CI failure in that native build would be a stop-and-report case (no other package is a fallback).
+
+---
+
+## 4. Audio runtime rules (chat B)
+
+- Lazy init: the audio engine starts after the first frame (`addPostFrameCallback`), never in `main` before `runApp`. Cold start is unchanged. Sounds queued before it is ready are dropped, not delayed.
+- Failure is silent: any error from the plugin (init, load, play) turns audio off for the session and logs with `debugPrint`; the game goes on without sound.
+- No audio focus: the app does not request it and does not duck other apps.
+- Background: music pauses when the lifecycle leaves `resumed` and resumes (with a fade) when it returns; effects are never queued across a pause.
+- Fades: 400 ms linear in and out for music (screen enter and exit, toggle, background, pause).
+- Screens: music plays on the table (`GameScreen`) and on the replay viewer only. Home, Setup, Saved Games and Settings are silent.
+- Replay: `ReplayController.speed == 1x` plays effects; 2x and 4x mute them (music is unaffected). A scrub or a jump plays nothing.
+- Variation uses the `SfxPlayer`'s own `Random`. Nothing in the audio path may read `GameState.rngState` or call `Dice`.
+- Settings are applied live: `sfxEnabled` and `sfxVolume` go to `SfxPlayer.enabled/volume`, `musicEnabled` and `musicVolume` to the music voice.
+
+**As built (`app/lib/audio/`):**
+
+- `AudioBackend` is the small abstract engine (`init`, `loadEffect`, `loadMusic`, `playEffect(volume, rate)`, `startMusic`, `setMusicVolume`, `pauseMusic`, `dispose`). `SoloudBackend` is the only file that imports `flutter_soloud`, and only `main.dart` imports it, so no test loads the plugin; tests use `FakeAudioBackend` and `FakeAudioClock` (`app/test/fakes/fake_audio.dart`).
+- `AudioService` owns the `SfxPlayer` (its `emit` goes to `playEffect`) and the music voice. Effects are decoded into memory once at `start()`; the music streams from disk (`LoadMode.disk`) and is protected from voice stealing. `start()` is called from a post-frame callback in `LudoApp`. Any exception turns the service off for the session (`debugPrint`, backend disposed once). `bind(GameSettings)` applies the four sound settings now and on every change; `LudoApp`, `GameScreen` and `ReplayScreen` all bind (idempotent).
+- Music is state, not an event: `enterMusicScreen()` / `leaveMusicScreen()` count the screens that want it (the replay opened over the table makes it 2, so the track keeps playing); it plays when ready, enabled, a screen is up and the app is `resumed`. A request made before the engine is ready is remembered and starts when it is (effects are dropped, not remembered). The fade is `MusicFade` (`lib/ui/core/music_fade.dart`, pure): linear, 400 ms for a full swing, a partial swing takes proportionally less. Leaving `resumed` pauses at once without a fade and drops delayed cues; returning fades in from silence. The music pauses (keeps its place) after a fade-out, so the next screen continues the track.
+- `GameFeedback` (`game_feedback.dart`) is the one place that plays haptic and sound together: `feedback.play(HapticEvent.x)` is unchanged at all call sites, so timing is unchanged; `feedback.sound(SfxEvent.hop)` is the hop. `feedback.enabled` stays the haptics switch. `soundMuted` is the replay gate (setting it drops delayed cues); `ReplayController.speed` sets it (`!= 1` mutes); `replayShow` (scrub, jump, step back) cancels delayed cues and plays nothing.
+- Hops: `MoveAnimationPlan.hopTimesMs` (pure, from `hopSoundTimesMs`) lists one take-off time per hop step (`hopStepMs` 130 ms; a yard exit is one hop of `yardExitMs`; none with reduced motion); `GameController.tick` fires them.
+- A test scans `app/lib/audio/` for `rngState` and `Dice`.
+
+---
+
+## 5. Sound core (`lib/ui/core/sfx.dart`, chat A)
+
+Pure Dart like `haptics.dart` (guarded by `test/ui/core_purity_test.dart`; it only uses `dart:math` and `haptics.dart`).
+
+- `SfxEvent`: the ten events above.
+- `sfxFor(HapticEvent)`: the mapping (total: every haptic event has a sound). `hop` has no haptic source.
+- `sfxMinGapMs`, `sfxVariation`: the tables of section 2.
+- `clampVolume(double)`: into `0..1`, NaN becomes 0.
+- `SfxCue(event, volume, rate)`: what the backend plays; `volume` is the slider value times the gain factor, already clamped; `rate` is the playback-rate factor.
+- `SfxPlayer({emit, schedule, nowMs, seed})`: `enabled`, `volume`, `play(SfxEvent)`, `playHaptic(HapticEvent)`. It applies the enabled flag and the per-event rate limit, spreads delayed cues (`six` 80 ms) through the injected `schedule`, re-checks `enabled` and the limit when a delayed cue fires, and draws variation from its own `Random(seed)`. A volume of 0 emits nothing.
+
+Chat A does not hook it into `GameController`.
+
+---
+
+## 6. Palettes and theme mode
+
+- **Palettes:** `PaletteId.classic`, `PaletteId.slate`, `PaletteId.highContrast`. Each has a light and a dark `LudoPalette` (the table: background, board, cells, felt, wood frame, seat colours) and a Material `ColorScheme` seed for the screens that use Material widgets (Home, Setup, Saved Games, Settings, menu).
+  - **Classic** is today's look (warm linen felt, wooden frame, red / green / yellow / blue).
+  - **Slate** is a cool, quieter look: blue-grey felt and a darker frame, seat colours slightly desaturated.
+  - **High Contrast** has strong value contrast between board, cells, lines and tokens, black or white text, saturated seat colours, and shape cues that do not rely on colour alone where the painters allow it. Target: WCAG AA contrast (4.5:1) for text and 3:1 for the board lines and token outlines.
+  - Hex values are final (chat C); the tables below list them. The single source is `lib/ui/core/palette_spec.dart` (pure Dart: packed ARGB ints and the Material seed per palette); `LudoPalette.of(PaletteId, Brightness)` in `app/lib/ui/theme/palette.dart` builds the Flutter colours from it and always returns the same shared instance, so painters compare palettes by identity. `ludoTheme(id, brightness)` (`app/lib/ui/theme/app_theme.dart`) builds the `ThemeData` with `ColorScheme.fromSeed`, once per palette and brightness.
+  - High Contrast seats are the Okabe-Ito set (vermillion, bluish green, yellow, blue) so the names Red / Green / Yellow / Blue stay true. In the light variant the yellow is a deeper gold (`#B38F00`) and the other seats are the plain Okabe-Ito shades, because every seat must reach 3:1 against the white cell; the dark variant uses brighter shades of the same four hues for the same reason.
+- **Theme mode:** `ThemeMode.system` (default), `light`, `dark`. The app's `MaterialApp` uses `themeMode`; the table picks the light or dark `LudoPalette` of the chosen palette from the effective brightness.
+- **Presentation only:** theme mode and palette live in `GameSettings` and `shared_preferences`. No change in the save format, the engine, the storage or the AI. A replay or a resumed game looks the way the settings say now, not the way it looked when it was played. Saved games and replays follow the current setting: the palette and theme mode are read when the table is built, nothing about them is written to a save, and switching them in the in-game menu repaints the open table (or replay) at once.
+
+
+### Hex values
+
+Packed colours are opaque; `seat` is Red, Green, Yellow, Blue.
+
+**Classic** (Material seed #6750A4)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#F3F1EC` | `#121212` |
+| board | `#FAF7F0` | `#1E1E22` |
+| cell | `#FFFFFF` | `#2B2B31` |
+| cellLine | `#CFC8BA` | `#3D3D45` |
+| yardInner | `#FFFFFF` | `#2B2B31` |
+| text | `#22201C` | `#EDEDED` |
+| seat Red | `#E53935` | `#E53935` |
+| seat Green | `#43A047` | `#43A047` |
+| seat Yellow | `#FDD835` | `#FDD835` |
+| seat Blue | `#1E88E5` | `#1E88E5` |
+| feltCentre | `#E9E2D3` | `#2A2D30` |
+| feltEdge | `#CDC3AE` | `#111214` |
+| woodLight | `#A06F42` | `#8C5E36` |
+| woodDark | `#6E4726` | `#583820` |
+| woodGrainDark | `#3B2210` | `#2E1A0B` |
+| woodGrainLight | `#C99562` | `#B0804F` |
+
+**Slate** (Material seed #546E7A)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#E4E9EF` | `#0E1217` |
+| board | `#EEF2F6` | `#1A212A` |
+| cell | `#FAFBFD` | `#242D38` |
+| cellLine | `#B4BECB` | `#3A4757` |
+| yardInner | `#FAFBFD` | `#242D38` |
+| text | `#1D2530` | `#E4EAF1` |
+| seat Red | `#C9524E` | `#D1625D` |
+| seat Green | `#4E9A5B` | `#5BA867` |
+| seat Yellow | `#DDBF4A` | `#E3C752` |
+| seat Blue | `#4A86C2` | `#5A93CF` |
+| feltCentre | `#B9C5D3` | `#2A3644` |
+| feltEdge | `#93A2B5` | `#10151B` |
+| woodLight | `#5E5047` | `#4A3E36` |
+| woodDark | `#3C322C` | `#2E2621` |
+| woodGrainDark | `#211A15` | `#17120E` |
+| woodGrainLight | `#8A7767` | `#6F5E50` |
+
+**High Contrast** (Material seed #0072B2, scheme contrast level 1.0)
+
+| Role | Light | Dark |
+|---|---|---|
+| background | `#FFFFFF` | `#000000` |
+| board | `#EDEDED` | `#0A0A0A` |
+| cell | `#FFFFFF` | `#2A2A2A` |
+| cellLine | `#111118` | `#F5F3EA` |
+| yardInner | `#FFFFFF` | `#2A2A2A` |
+| text | `#000000` | `#FFFFFF` |
+| seat Red | `#D55E00` | `#FF6B2B` |
+| seat Green | `#009E73` | `#00C08B` |
+| seat Yellow | `#B38F00` | `#F0E442` |
+| seat Blue | `#0072B2` | `#4DA3E0` |
+| feltCentre | `#F2F0E6` | `#1A1A1A` |
+| feltEdge | `#D9D5C4` | `#000000` |
+| woodLight | `#6B4423` | `#8C5E36` |
+| woodDark | `#3A2210` | `#583820` |
+| woodGrainDark | `#1E0F05` | `#2E1A0B` |
+| woodGrainLight | `#9A6A3E` | `#B0804F` |
+
+### Contrast (WCAG ratios)
+
+Checked by `test/ui/palette_contrast_test.dart` (pure Dart, prints this table). Forced: text against background and board at 4.5:1 in every palette; in High Contrast also `cellLine` against board and cell, every seat colour against the cell and text against the felt at 3:1 or better (4.5:1 for the text). Classic and Slate are reported, not forced (their seat colours and lines are soft on purpose; Classic is the look from before this milestone).
+
+| Palette | text / background | text / board | line / board | Red / cell | Green / cell | Yellow / cell | Blue / cell |
+|---|---|---|---|---|---|---|---|
+| Classic light | 14.41 | 15.20 | 1.55 | 4.23 | 3.30 | 1.40 | 3.68 |
+| Classic dark | 16.00 | 14.19 | 1.54 | 3.33 | 4.26 | 10.08 | 3.82 |
+| Slate light | 12.65 | 13.73 | 1.67 | 4.23 | 3.33 | 1.74 | 3.70 |
+| Slate dark | 15.51 | 13.39 | 1.71 | 3.73 | 4.80 | 8.33 | 4.32 |
+| High Contrast light | 21.00 | 17.94 | 16.06 | 3.87 | 3.42 | 3.07 | 5.19 |
+| High Contrast dark | 21.00 | 19.80 | 17.81 | 5.05 | 6.09 | 10.85 | 5.22 |
+
+The soft lines and the light yellow of Classic and Slate are why High Contrast exists. Known limitation: the die pips are white-ish on every seat colour, which is weakest on the bright yellow of the dark High Contrast palette; it is a device-review item.
+
+---
+
+## 7. Settings keys and defaults
+
+`GameSettings` (app) and `SettingsStore` keys (`shared_preferences`):
+
+| Field | Key | Type | Default |
+|---|---|---|---|
+| `haptics` | `settings.haptics` | bool | `true` (existing) |
+| `reduceMotion` | `settings.reduceMotion` | enum name | `system` (existing) |
+| `orientation` | `settings.orientation` | enum name | `table` (existing) |
+| `autoRotateShared` | `settings.autoRotateShared` | bool | `true` (existing) |
+| `frameOverlay` | `settings.frameOverlay` | bool | `false` (existing) |
+| `sfxEnabled` | `settings.sfxEnabled` | bool | `true` |
+| `sfxVolume` | `settings.sfxVolume` | double `0..1` | `0.8` |
+| `musicEnabled` | `settings.musicEnabled` | bool | `false` |
+| `musicVolume` | `settings.musicVolume` | double `0..1` | `0.4` |
+| `themeMode` | `settings.themeMode` | `ThemeMode` name | `system` |
+| `paletteId` | `settings.paletteId` | `PaletteId` name | `classic` |
+
+Loading is tolerant: a missing, mistyped or unknown value (a bool where a string is expected, a volume outside `0..1`, NaN, an unknown palette name) falls back to the default of that one field and keeps the good ones. A volume that is a number but out of range is clamped rather than dropped; one that is not a finite number falls back to the default. The setters clamp a number into range and ignore a value that is not finite (NaN, infinity), keeping the current one.
+
+---
+
+## 8. Settings screen and menu
+
+- **Shared panel** (`SettingsPanel`, `app/lib/ui/settings/settings_panel.dart`): the rows that used to live inside the menu page (Haptics, Reduce motion, UI orientation, Auto-rotate menu to active seat, Frame timing overlay), as a scrollable list bound to a `GameSettings`. Chat B added a **Sound** section (header, Sound effects switch and slider, Music switch and slider; keys `sfx-switch`, `sfx-volume`, `music-switch`, `music-volume`) between Auto-rotate and Frame timing overlay; a slider is greyed out while its switch is off, and changes apply live through `AudioService.bind` and persist through `SettingsStore`. Chat C added the **Look** section to this one panel, so both entry points have it: a header, a **Theme** row (System / Light / Dark, `SegmentedButton`, key `theme-mode`) and a **Palette** row (three tiles, keys `palette-classic`, `palette-slate`, `palette-highContrast`, each with a swatch drawn by `PaletteSwatchPainter` in the palette's own colours for the current brightness: the board with its cross of cells and the four yards in the seat colours, plus the name; the selected tile has a thick outline and the selected semantics flag). It sits after Sound and before Frame timing overlay, so the rows above it keep their places and the Sound tests are unchanged. Changes apply live (`MaterialApp` rebuilds when the theme mode or palette changes, the table when the palette changes) and persist through `SettingsStore`.
+- **`SettingsScreen`** (`app/lib/ui/settings/settings_screen.dart`): a normal route with an app bar and the panel. Home has a gear button (key `home-settings`) that opens it.
+- **In-game menu:** the Settings entry shows the same panel inside the turned menu card, with its own back arrow.
+- **Menu entries now:** New game, Players & rules (when available), Settings, Close. No Rules item.
+- Orientation rows that make no sense outside a game (auto-rotate of the shared menu) stay as they are; they are harmless on Home.
+
+---
+
+## 9. Chat plan
+
+- **Chat A (done with this doc):** this doc; settings model and store; shared panel, `SettingsScreen` and the Home gear; the Rules item removed; `lib/ui/core/sfx.dart` and tests; status pointers. No plugin, no assets.
+- **Chat B (sound), done:**
+  1. The synthesis script and the generated assets (<= 600 KB), a test or CI check of the size cap, `pubspec.yaml` asset entries.
+  2. `flutter_soloud` as the only new dependency; an `AudioService` in `app/lib/audio/` that binds `SfxPlayer` to the engine (lazy init, silent failures, no audio focus), plus a music voice with 400 ms fades.
+  3. Hook the player into the haptic call sites (one place that plays haptic and sound together), the `hop` call site, replay speed gating, music on the table and the replay screen only, lifecycle pause.
+  4. Sound rows in the shared panel (Sound effects on/off and volume, Music on/off and volume); widget and unit tests with a fake backend.
+- **Chat C (look, polish), done; the PR to main waits for the device review:**
+  1. Settle the palette hex values and write them into section 6.
+  2. `PaletteId` palettes (light and dark), theme mode wired into `MaterialApp`, the table painters reading the chosen palette, `ColorScheme` per palette.
+  3. Look rows in the shared panel (Theme mode, Palette with a small preview).
+  4. Polish, update this doc, run the device review, then open the PR to main after it.
+
+Each chat starts by reading `CLAUDE.md` and this file; no re-planning.
+
+---
+
+## 10. Device checklist
+
+Chat A (settings and menu, no sound yet):
+
+1. Home shows a gear button; it opens Settings; every existing row works; Back returns to Home.
+2. Changing a setting on Home, then starting a game, applies it in the game.
+3. In a game the menu has New game, Players & rules, Settings, Close, and no Rules item; Settings shows the same rows.
+4. Banked rolls can still be switched in Players & rules.
+5. Settings persist across a full restart (force stop and reopen).
+
+Chat B (sound). Use the release or profile APK from CI; effects volume 80 %, music volume 40 % (defaults) unless a step says otherwise.
+
+1. Cold start feels the same as before (the audio engine starts after the first frame). Home is silent.
+2. Start a game with sound effects on. Each event is audible and fits the moment: dice throw (a rattle and a whoosh as soon as you roll, in the air), dice roll (three clacks on the table), dice settle click, a hop per square (a run of soft plucks, one per step; a yard exit is one hop), landing, capture (heavier knock and a sweep), reaching home (three rising bells), a six (two-note chime just after the settle), win (short fanfare), illegal tap and "no move" (low double tick), roll-tray chip select (tiny tick). Haptics still fire exactly where they did.
+3. Dice and hop sounds line up with what you see (no obvious lag); note how late the first sound feels after a tap.
+4. Settings, Sound effects volume slider while playing: the next sound follows it. Sound effects off: silence (haptics unaffected). Back on: sounds return.
+5. Music is off by default. Switch it on in Settings (from Home): nothing plays on Home or Settings. Start a game: music fades in over about 0.4 s. It is clearly quieter than the effects at equal sliders.
+6. Music slider moves the volume live. Music off in the in-game menu: it fades out and stops; on again: it fades in.
+7. Game menu, New game, Players & rules, Saved Games, Setup, Home: the music fades out when the table is left and is silent on those screens.
+8. Game over, Watch replay: the music keeps playing without a restart; leave the replay back to the table: still playing; leave the table to Home: it fades out.
+9. Home button or app switcher: the music pauses at once. Come back: it fades in again. No effect "ghost" plays after coming back.
+10. Replay at 1x plays the effects; 2x and 4x are silent for effects; dragging the scrubber, Jump to start or end and Step back are silent. The music is unaffected by the speed.
+11. Listen to the music loop for a minute or two (it is 60 s): the seam where it starts again should not click or jump. It should feel light and playful (kalimba, arpeggio), not busy; the dice sounds stay clear on top of it.
+11b. Roll the die: a rattle and whoosh the moment it leaves the hand and while it is in the air, the clacks on the three bounces, then the settle click. Tap the dock again during the roll (quick roll): the throw plays, the table clacks are skipped, the settle click plays.
+12. Other apps: start music or a podcast in another app, then open Ludo and play with the music off: the other audio is not interrupted or ducked by effects. Notification volume or silent mode behaves like any media app (media volume controls it).
+13. Replay in the background or screen off does not keep playing sound.
+14. Airplane mode and a Bluetooth headset connecting or disconnecting mid-game do not crash; if audio breaks, the game goes on silent.
+15. Settings persist across a full restart (switches and both volumes).
+
+Chat C (look). Use the release or profile APK from CI. Check each palette in light and dark unless a step says otherwise.
+
+1. Settings (from Home): a Look section after Sound with Theme (System / Light / Dark) and Palette (Classic, Slate, High Contrast). Each palette tile shows a small board with four seat colours; the selected one has a thick outline. Tapping changes the whole app at once (app bar, switches, tiles), with no restart.
+2. Theme System follows the phone: switch the phone between light and dark while Ludo is open (and from the notification shade); the app follows. Light and Dark force it regardless of the phone.
+3. Table, Classic, light and dark: unchanged from before this milestone (board, yards, wood frame, felt, tokens, dice, docks).
+4. Table, Slate, light and dark: blue-grey felt, a darker frame, seat colours quieter than Classic but still easy to tell apart (Red and Yellow, Green and Blue); lines and tokens readable; nothing glaring.
+5. Table, High Contrast, light and dark: board, cells, lines and tokens clearly separated; the lines are black (light) or off-white (dark), not grey on grey; the four seats are vermillion, bluish green, yellow and blue and each still reads as Red, Green, Yellow, Blue. Try a grayscale or colour-blind filter if the phone has one: the four seats must stay distinguishable by lightness and by their yard positions. Look at the die pips on the yellow die (known weakest point) and at the menu button icon on the felt.
+6. High Contrast outdoors in bright light: the table and tokens are legible; note anything that washes out.
+7. In a game, open the menu, Settings, Look and switch palette and Theme mode: the table repaints at once with no hitch (turn on Frame timing overlay to see), the game state, dice and animations carry on, and no leftover colours stay behind (glows, shadows, halos, toasts, rank badges, confetti, the illegal-tap ring is the palette's Red).
+8. Setup (New game): the seat map and the seat tiles use the chosen palette. Home, Saved Games and Settings screens look right and readable in all three palettes, light and dark.
+9. A saved game and a replay look the way the settings say now: start a game in Classic, leave, switch to Slate, Continue it and Watch replay: both are Slate. Nothing else about the game, the list or the replay changes (same moves, same results).
+10. Settings persist across a full restart (force stop and reopen): theme mode and palette are as left.
+11. Haptics (shipped in M2, verify only): still felt on roll, landing, capture, home and win; the Haptics switch silences them; they are unaffected by the look.
+12. Cold start feels the same as before; nothing looks wrong on the first frame (no flash of another palette).

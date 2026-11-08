@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:ludo/storage/storage.dart';
 
+import '../../audio/audio_service.dart';
 import '../../game/replay_controller.dart';
 import '../../settings/game_settings.dart';
 import '../table/table_view.dart';
@@ -24,6 +25,7 @@ class ReplayScreen extends StatefulWidget {
     this.salvaged = false,
     this.controller,
     this.settings,
+    this.audio,
   });
 
   final ReplayScript script;
@@ -34,19 +36,23 @@ class ReplayScreen extends StatefulWidget {
   final ReplayController? controller;
   final GameSettings? settings;
 
+  /// App-wide sound: effects at 1x only, music while this screen is up.
+  /// Silent when omitted (tests).
+  final AudioService? audio;
+
   @override
   State<ReplayScreen> createState() => _ReplayScreenState();
 }
 
 class _ReplayScreenState extends State<ReplayScreen>
     with SingleTickerProviderStateMixin {
-  late final ReplayController _replay =
-      widget.controller ?? ReplayController(script: widget.script);
+  late final ReplayController _replay = widget.controller ??
+      ReplayController(script: widget.script, audio: widget.audio);
   late final GameSettings _settings = widget.settings ?? GameSettings();
   bool _systemReduced = false;
   late final Ticker _ticker;
-  Brightness? _shaderBrightness;
-  TokenShaders? _shaders;
+  final TokenShadersCache _shaders = TokenShadersCache();
+  VoidCallback? _unbindAudio;
 
   @override
   void initState() {
@@ -56,6 +62,8 @@ class _ReplayScreenState extends State<ReplayScreen>
     _replay.addListener(_syncTicker);
     _replay.game.addListener(_syncTicker);
     _settings.addListener(_onSettings);
+    _unbindAudio = widget.audio?.bind(_settings);
+    widget.audio?.enterMusicScreen();
     _syncTicker();
   }
 
@@ -84,6 +92,8 @@ class _ReplayScreenState extends State<ReplayScreen>
 
   @override
   void dispose() {
+    _unbindAudio?.call();
+    widget.audio?.leaveMusicScreen();
     _replay.removeListener(_syncTicker);
     _replay.game.removeListener(_syncTicker);
     _settings.removeListener(_onSettings);
@@ -112,36 +122,39 @@ class _ReplayScreenState extends State<ReplayScreen>
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final palette =
-        brightness == Brightness.dark ? LudoPalette.dark : LudoPalette.light;
-    if (_shaders == null || _shaderBrightness != brightness) {
-      _shaders = TokenShaders(palette);
-      _shaderBrightness = brightness;
-    }
-    return Scaffold(
-      backgroundColor: palette.feltEdge,
-      body: Column(
-        children: [
-          Expanded(
-            // The controls take the bottom inset; the table keeps the rest.
-            child: MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_replay, _replay.game, _settings]),
-                builder: (context, _) => TableView(
-                  game: _replay.game,
-                  settings: _settings,
-                  palette: palette,
-                  shaders: _shaders!,
-                  onClose: () => Navigator.of(context).maybePop(),
+    // Same look as the game: the settings' palette, live.
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) {
+        final palette = LudoPalette.of(_settings.paletteId, brightness);
+        final shaders = _shaders.forPalette(palette);
+        return Scaffold(
+          backgroundColor: palette.feltEdge,
+          body: Column(
+            children: [
+              Expanded(
+                // The controls take the bottom inset; the table keeps the rest.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeBottom: true,
+                  child: AnimatedBuilder(
+                    animation:
+                        Listenable.merge([_replay, _replay.game, _settings]),
+                    builder: (context, _) => TableView(
+                      game: _replay.game,
+                      settings: _settings,
+                      palette: palette,
+                      shaders: shaders,
+                      onClose: () => Navigator.of(context).maybePop(),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              ReplayControls(replay: _replay, notice: _notice),
+            ],
           ),
-          ReplayControls(replay: _replay, notice: _notice),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -155,8 +155,8 @@ Toasts: small pill at the active dock, rotated per section 3, 1.2 s, fades; text
 
 ## 8. Menu, game over, settings
 
-- **Menu sheet** (top-centre icon): New game, Settings, Rules (placeholder until the rules chat lands), Close. Oriented per section 3.
-- **Settings (in-memory for now, `shared_preferences` in Milestone 6):** Haptics on/off, Reduce motion override, UI orientation (Table / Fixed), Auto-rotate shared UI to active seat.
+- **Menu sheet** (top-centre icon): New game, Players & rules, Settings, Close (the "Rules" placeholder was removed in Milestone 6; banked rolls is a rule in Players & rules). Oriented per section 3.
+- **Settings (persisted with `shared_preferences` since Milestone 5; one shared panel for Home and the menu since Milestone 6):** Haptics on/off, Reduce motion override, UI orientation (Table / Fixed), Auto-rotate shared UI to active seat.
 - **Game over:** per-seat rank badges (1st to 4th, seat colours) at each dock facing its player, confetti, shared "Rematch" / "Menu" buttons facing the winner.
 
 ---

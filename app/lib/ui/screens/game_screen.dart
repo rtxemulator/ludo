@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/storage/storage.dart';
 
+import '../../audio/audio_service.dart';
 import '../../game/game_controller.dart';
 import '../../settings/game_settings.dart';
 import '../table/table_view.dart';
@@ -19,6 +20,7 @@ class GameScreen extends StatefulWidget {
     super.key,
     this.controller,
     this.settings,
+    this.audio,
     this.setup,
     this.saves,
     this.resumeFrom,
@@ -33,6 +35,10 @@ class GameScreen extends StatefulWidget {
 
   /// Injectable for tests; when omitted the screen owns one.
   final GameSettings? settings;
+
+  /// App-wide sound: effects through the controller, music while this
+  /// screen is up. Silent when omitted (tests).
+  final AudioService? audio;
 
   /// Where the game autosaves; ignored when a [controller] is given. No
   /// saving when omitted.
@@ -61,13 +67,14 @@ class _GameScreenState extends State<GameScreen>
         setup: widget.setup,
         saves: widget.saves,
         resumeFrom: widget.resumeFrom,
+        audio: widget.audio,
       );
   late final GameSettings _settings =
       widget.settings ?? GameSettings(haptics: _game.feedback.enabled);
   bool _systemReduced = false;
   late final Ticker _ticker;
-  Brightness? _shaderBrightness;
-  TokenShaders? _shaders;
+  final TokenShadersCache _shaders = TokenShadersCache();
+  VoidCallback? _unbindAudio;
 
   @override
   void initState() {
@@ -78,6 +85,9 @@ class _GameScreenState extends State<GameScreen>
     _game.feedback.enabled = _settings.haptics;
     _game.addListener(_syncTicker);
     _settings.addListener(_onSettings);
+    // Sound settings apply live; the music plays while this screen is up.
+    _unbindAudio = widget.audio?.bind(_settings);
+    widget.audio?.enterMusicScreen();
     _syncTicker();
   }
 
@@ -107,6 +117,8 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
+    _unbindAudio?.call();
+    widget.audio?.leaveMusicScreen();
     _game.removeListener(_syncTicker);
     _settings.removeListener(_onSettings);
     _ticker.dispose();
@@ -122,38 +134,41 @@ class _GameScreenState extends State<GameScreen>
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final palette =
-        brightness == Brightness.dark ? LudoPalette.dark : LudoPalette.light;
-    if (_shaders == null || _shaderBrightness != brightness) {
-      _shaders = TokenShaders(palette);
-      _shaderBrightness = brightness;
-    }
-    return Scaffold(
-      backgroundColor: palette.feltEdge,
-      // The table handles the system insets itself so the felt runs edge to
-      // edge.
-      body: AnimatedBuilder(
-        animation: Listenable.merge([_game, _settings]),
-        builder: (context, _) => TableView(
-          game: _game,
-          settings: _settings,
-          palette: palette,
-          shaders: _shaders!,
-          onReplay: widget.onReplay == null
-              ? null
-              : () {
-                  final save = _game.save;
-                  if (save != null) {
-                    widget.onReplay!(save);
-                  }
-                },
-          // Back to the setup screen, when this screen was opened from it.
-          onSetup: widget.onSetup ??
-              (Navigator.of(context).canPop()
-                  ? () => Navigator.of(context).pop()
-                  : null),
-        ),
-      ),
+    // The palette follows the settings live: the outer builder rebuilds when
+    // the palette changes, and the shaders are rebuilt with it.
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (context, _) {
+        final palette = LudoPalette.of(_settings.paletteId, brightness);
+        final shaders = _shaders.forPalette(palette);
+        return Scaffold(
+          backgroundColor: palette.feltEdge,
+          // The table handles the system insets itself so the felt runs edge
+          // to edge.
+          body: AnimatedBuilder(
+            animation: Listenable.merge([_game, _settings]),
+            builder: (context, _) => TableView(
+              game: _game,
+              settings: _settings,
+              palette: palette,
+              shaders: shaders,
+              onReplay: widget.onReplay == null
+                  ? null
+                  : () {
+                      final save = _game.save;
+                      if (save != null) {
+                        widget.onReplay!(save);
+                      }
+                    },
+              // Back to the setup screen, when this screen was opened from it.
+              onSetup: widget.onSetup ??
+                  (Navigator.of(context).canPop()
+                      ? () => Navigator.of(context).pop()
+                      : null),
+            ),
+          ),
+        );
+      },
     );
   }
 }

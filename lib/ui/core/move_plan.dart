@@ -11,6 +11,7 @@ import 'fx.dart';
 import 'fx_scene.dart';
 import 'motion_spec.dart';
 import 'pt.dart';
+import 'sfx.dart' show hopSoundTimesMs;
 import 'token_timeline.dart';
 
 /// A captured token and when its animation starts.
@@ -40,6 +41,7 @@ class MoveAnimationPlan {
     required this.victims,
     required this.ring,
     required this.effects,
+    required this.hopTimesMs,
     required this.totalMs,
   });
 
@@ -164,6 +166,12 @@ class MoveAnimationPlan {
       victims: victims,
       ring: ring,
       effects: effects,
+      hopTimesMs: spec.reducedMotion
+          ? const []
+          : hopSoundTimesMs(
+              steps: path.length - 1,
+              stepMs: from == yardPosition ? spec.yardExitMs : spec.hopStepMs,
+            ),
       totalMs: total,
     );
   }
@@ -188,6 +196,10 @@ class MoveAnimationPlan {
   /// Rings, sparks and glows this move spawns (absolute times); they live on
   /// in the controller's scene after the plan ends.
   final PlanEffects effects;
+
+  /// When the hop sound plays, one per hop step (ms after the plan starts;
+  /// empty with reduced motion, where the token does not hop).
+  final List<double> hopTimesMs;
 
   /// When input may be unlocked again.
   final double totalMs;

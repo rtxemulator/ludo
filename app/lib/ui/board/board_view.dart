@@ -5,6 +5,7 @@ import 'package:ludo/ui/core/pt.dart';
 import '../../game/game_controller.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
+import 'home_pips_painter.dart';
 import 'token_layer_painter.dart';
 import 'yard_glow_painter.dart';
 
@@ -38,18 +39,29 @@ class BoardView extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CustomPaint(
-                painter: YardGlowPainter(
-                  game: game,
-                  palette: palette,
-                  shaders: shaders,
+              // Dynamic layers, each in its own RepaintBoundary so one
+              // layer repainting never re-rasterises another.
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: YardGlowPainter(
+                    game: game,
+                    palette: palette,
+                    shaders: shaders,
+                  ),
                 ),
               ),
-              CustomPaint(
-                painter: TokenLayerPainter(
-                  game: game,
-                  palette: palette,
-                  shaders: shaders,
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: HomePipsPainter(game: game, palette: palette),
+                ),
+              ),
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: TokenLayerPainter(
+                    game: game,
+                    palette: palette,
+                    shaders: shaders,
+                  ),
                 ),
               ),
             ],

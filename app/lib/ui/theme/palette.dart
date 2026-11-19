@@ -1,6 +1,7 @@
 import 'dart:ui' show Brightness;
 
 import 'package:flutter/painting.dart';
+import 'package:ludo/ui/core/board_polish.dart';
 import 'package:ludo/ui/core/palette_spec.dart';
 
 export 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
@@ -93,4 +94,10 @@ class LudoPalette {
   Color seatLight(int s) => Color.lerp(seat[s], _white, 0.45)!;
 
   Color seatDark(int s) => Color.lerp(seat[s], _black, 0.35)!;
+
+  /// A mark drawn on seat [s]'s colour (chevrons, pips): dark on a light seat
+  /// colour, light on a dark one, so it reads in every palette.
+  Color onSeat(int s) => BoardPolish.darkMarkOn(seat[s].computeLuminance())
+      ? Color.lerp(seat[s], _black, 0.65)!
+      : Color.lerp(seat[s], _white, 0.85)!;
 }

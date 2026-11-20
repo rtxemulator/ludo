@@ -84,3 +84,26 @@ class DockLook {
     return 1 - u;
   }
 }
+
+/// How the die faces are drawn (polish pass). Pure numbers; one overhead
+/// light, so everything is symmetric: lighter in the middle of a face, darker
+/// toward its edges, a lighter line just inside the rim, a soft ring around
+/// every pip.
+class DieLook {
+  const DieLook._();
+
+  /// Face gradient: white at the centre, black at the rim (alpha `0..1`).
+  static const double centreLight = 0.20;
+  static const double rimShade = 0.18;
+
+  /// Highlight line just inside the rim: inset, width and alpha (scaled by
+  /// the face shade, so faces turned away from the light get less).
+  static const double highlightInset = 0.045;
+  static const double highlightWidth = 0.028;
+  static const double highlightAlpha = 0.38;
+
+  /// Pip and the soft dark ring around it (radius in face units).
+  static const double pipRadius = 0.085;
+  static const double pipShadowRadius = 0.112;
+  static const double pipShadowAlpha = 0.34;
+}

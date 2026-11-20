@@ -48,9 +48,9 @@ class MotionSpec {
     this.movableLift = 0.24,
     this.confettiMs = 3200,
     this.dockHandoffMs = 200,
-    this.ghostOpacity = 0.45,
-    this.ghostScale = 0.8,
-    this.ghostDesaturate = 0.7,
+    this.ghostOpacity = 0.4,
+    this.ghostScale = 0.72,
+    this.ghostDesaturate = 0,
     this.idleBobPeriodMs = 1600,
     this.idleBobScale = 0.04,
     this.idleHaloOpacity = 0.28,
@@ -166,7 +166,8 @@ class MotionSpec {
   final double ghostOpacity;
   final double ghostScale;
 
-  /// How much colour a ghost die loses (`0..1`).
+  /// How much colour a ghost die loses (`0..1`). Zero: a ghost keeps its
+  /// seat's colour (it only fades), so it never turns muddy grey.
   final double ghostDesaturate;
 
   /// Idle bob of the die that waits to be rolled: scale `1 +- idleBobScale`

@@ -87,6 +87,23 @@ class DockLayer extends StatelessWidget {
                 ),
               ),
             ),
+        // While a roll is due, the whole tray rolls too (not just the dock).
+        for (final dock in layout.docks)
+          if (game.banked &&
+              !yardsBusy &&
+              game.phase == GamePhase.awaitingRoll &&
+              dock.seat == game.state.currentSeat)
+            Positioned(
+              left: dock.tray.left,
+              top: dock.tray.top,
+              width: dock.tray.width,
+              height: dock.tray.height,
+              child: GestureDetector(
+                key: ValueKey<String>('tray-roll-${dock.seat}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => game.dockTap(dock.seat),
+              ),
+            ),
         for (final dock in layout.docks)
           if (game.trayTappable(dock.seat))
             Positioned(

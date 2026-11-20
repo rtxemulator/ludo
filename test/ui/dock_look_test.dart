@@ -44,10 +44,11 @@ void main() {
   });
 
   group('DockLook.sample', () {
-    test('ghost: 45% opacity, 0.8 scale, desaturated, no halo', () {
+    test('ghost: 40% opacity, 0.72 scale, keeps its seat colour, no halo', () {
       final look = DockLook.sample(live: 0, idle: false, tMs: 123);
-      expect(look.opacity, closeTo(0.45, 1e-9));
-      expect(look.scale, closeTo(0.8, 1e-9));
+      expect(look.opacity, closeTo(0.4, 1e-9));
+      expect(look.scale, closeTo(0.72, 1e-9));
+      expect(look.desaturate, 0);
       expect(look.desaturate, closeTo(spec.ghostDesaturate, 1e-9));
       expect(look.halo, 0);
     });
@@ -130,6 +131,16 @@ void main() {
           expect(v.y, closeTo(want.y, 1e-9));
         }
       }
+    });
+  });
+
+  group('DieLook', () {
+    test('faces are shaded symmetrically and stay subtle', () {
+      expect(DieLook.centreLight, inInclusiveRange(0.1, 0.3));
+      expect(DieLook.rimShade, inInclusiveRange(0.1, 0.3));
+      expect(DieLook.highlightInset, greaterThan(DieLook.highlightWidth));
+      expect(DieLook.pipShadowRadius, greaterThan(DieLook.pipRadius));
+      expect(DieLook.pipShadowRadius, lessThan(0.15));
     });
   });
 }

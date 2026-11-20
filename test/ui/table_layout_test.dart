@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:ludo/ui/core/table_layout.dart';
 import 'package:test/test.dart';
 
@@ -208,11 +210,16 @@ void main() {
       expect(sharedUiTurns(layout, 0, UiOrientation.fixed), 0);
     });
 
-    test('trays are 1.1-cell chips in the margin beyond each dock', () {
+    test('trays are 1.3-cell chips in the margin beyond each dock', () {
       for (final d in layout.docks) {
         expect(d.trayOuter, isTrue);
-        expect(d.chipSize, closeTo(1.1 * layout.cell, 1e-6));
-        expect(d.trayCapacity, closeTo(6 / 1.1, 1e-6));
+        // 1.3 cells, or less where the margin is shallower (0.8 of its depth).
+        final depth = math.min(d.tray.width, d.tray.height);
+        final along = math.max(d.tray.width, d.tray.height);
+        expect(d.chipSize,
+            closeTo(math.min(1.3 * layout.cell, depth * 0.8), 1e-6));
+        expect(d.chipSize, greaterThan(1.1 * layout.cell));
+        expect(d.trayCapacity, closeTo(along / d.chipSize, 1e-6));
         expect(d.trayCenter.x, closeTo(d.rect.center.x, 1e-6));
       }
       // Upper seats: the tray is above the dock; lower seats: below it.

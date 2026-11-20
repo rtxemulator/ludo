@@ -140,7 +140,7 @@ class TableLayout {
 
   /// Roll tray (banked rolls): chip edge, strip depth and length along the
   /// table edge, gap to the dock, and the least outside room worth using.
-  static const double chipCells = 1.1;
+  static const double chipCells = 1.3;
   static const double trayDepthCells = 1.5;
   static const double trayAlongCells = 6.0;
   static const double trayGapCells = 0.1;

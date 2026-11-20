@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:ludo/ui/core/bank_tray.dart';
-import 'package:ludo/ui/core/dice3d.dart' show pipLayout;
+import 'package:ludo/ui/core/dock_look.dart' show DieLook;
 import 'package:ludo/ui/core/frame_stats.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/ui/core/table_layout.dart';
@@ -42,7 +42,43 @@ class TrayPainter extends CustomPainter {
     stops: [0.5, 1.0],
   ).createShader(Rect.fromCircle(center: Offset.zero, radius: 1));
 
+  /// Same soft light as the dock die: light in the middle, darker rim.
+  static final Shader _faceShader = const RadialGradient(
+    radius: 0.75,
+    colors: [
+      Color.fromRGBO(255, 255, 255, DieLook.centreLight),
+      Color(0x00000000),
+      Color.fromRGBO(0, 0, 0, DieLook.rimShade),
+    ],
+    stops: [0.0, 0.55, 1.0],
+  ).createShader(const Rect.fromLTWH(-0.5, -0.5, 1, 1));
+
+  /// The numeral is laid out at this size and drawn scaled down (crisp at any
+  /// chip size); it is about [_numeralScale] x [_numeralPx] px tall on a chip
+  /// face of one unit.
+  static const double _numeralPx = 100;
+  static const double _numeralScale = 0.0072;
+
   final Paint _fill = Paint();
+  final Paint _grad = Paint()..shader = _faceShader;
+  final Paint _layer = Paint();
+  final Map<int, TextPainter> _numerals = {};
+
+  TextPainter _numeral(int seat, int value) => _numerals.putIfAbsent(
+        seat * 10 + value,
+        () => TextPainter(
+          text: TextSpan(
+            text: '$value',
+            style: TextStyle(
+              color: palette.onSeat(seat),
+              fontSize: _numeralPx,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout(),
+      );
   final Paint _stroke = Paint()..style = PaintingStyle.stroke;
   final Paint _shadow = Paint()..shader = _shadowShader;
   final List<bool> _has = List.filled(_seats, false);
@@ -179,10 +215,10 @@ class TrayPainter extends CustomPainter {
       _fill
         ..shader = null
         ..colorFilter = null
-        ..color = glow.withAlpha((pose.select * opacity * 70).round());
-      canvas.drawCircle(Offset.zero, 0.95, _fill);
+        ..color = glow.withAlpha((pose.select * opacity * 110).round());
+      canvas.drawCircle(Offset.zero, 1.0, _fill);
       _stroke
-        ..strokeWidth = 0.07
+        ..strokeWidth = 0.09
         ..color = glow.withAlpha((pose.select * opacity * 230).round());
       canvas.drawRRect(_face.inflate(0.1), _stroke);
     }
@@ -192,13 +228,27 @@ class TrayPainter extends CustomPainter {
       ..colorFilter = null
       ..color = palette.seat[chip.seat].withAlpha(a);
     canvas.drawRRect(_face, _fill);
+    _grad.color = Color.fromARGB(a, 0, 0, 0);
+    canvas.drawRRect(_face, _grad);
     _stroke
       ..strokeWidth = 0.035
       ..color = Color.fromARGB((0x4D * opacity).round(), 255, 255, 255);
     canvas.drawRRect(_face, _stroke);
-    _fill.color = Color.fromARGB(a, 255, 255, 255);
-    for (final p in pipLayout(chip.value)) {
-      canvas.drawCircle(Offset(p.x, p.y), 0.085, _fill);
+
+    // The number, big and readable, facing the seat (the canvas is already
+    // turned to it). Faded with the chip through a small layer.
+    final tp = _numeral(chip.seat, chip.value);
+    final faded = a < 250;
+    if (faded) {
+      _layer.color = Color.fromARGB(a, 255, 255, 255);
+      canvas.saveLayer(const Rect.fromLTWH(-0.5, -0.5, 1, 1), _layer);
+    }
+    canvas.save();
+    canvas.scale(_numeralScale);
+    tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+    canvas.restore();
+    if (faded) {
+      canvas.restore();
     }
     canvas.restore();
   }

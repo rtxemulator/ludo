@@ -49,7 +49,25 @@ class DockPainter extends CustomPainter {
     stops: [0.5, 1.0],
   ).createShader(Rect.fromCircle(center: Offset.zero, radius: 1));
 
+  /// Soft light in the middle of a face, darker rim (symmetric, overhead
+  /// light). Built once in face units.
+  static final Shader _faceShader = const RadialGradient(
+    radius: 0.75,
+    colors: [
+      Color.fromRGBO(255, 255, 255, DieLook.centreLight),
+      Color(0x00000000),
+      Color.fromRGBO(0, 0, 0, DieLook.rimShade),
+    ],
+    stops: [0.0, 0.55, 1.0],
+  ).createShader(const Rect.fromLTWH(-0.5, -0.5, 1, 1));
+
   final Paint _fill = Paint();
+  final Paint _grad = Paint()..shader = _faceShader;
+  final Paint _hi = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = DieLook.highlightWidth;
+  final Paint _pipShadow = Paint()
+    ..color = const Color.fromRGBO(0, 0, 0, DieLook.pipShadowAlpha);
   final Paint _stroke = Paint()..style = PaintingStyle.stroke;
   final Paint _shadow = Paint()..shader = _shadowShader;
   final Paint _pip = Paint();
@@ -351,14 +369,27 @@ class DockPainter extends CustomPainter {
         ..shader = null
         ..color = Color.lerp(const Color(0xFF000000), base, face.shade)!;
       canvas.drawRRect(_face, _fill);
+      canvas.drawRRect(_face, _grad);
       canvas.drawRRect(_face, _edge);
+      _hi.color = Color.fromRGBO(
+        255,
+        255,
+        255,
+        DieLook.highlightAlpha * face.shade,
+      );
+      canvas.drawRRect(_face.deflate(DieLook.highlightInset), _hi);
       _pip.color = Color.lerp(
         const Color(0xFF000000),
         const Color(0xFFFFFFFF),
         0.7 + 0.3 * face.shade,
       )!;
       for (final p in pipLayout(face.value)) {
-        canvas.drawCircle(Offset(p.x, p.y), 0.085, _pip);
+        canvas.drawCircle(
+          Offset(p.x, p.y),
+          DieLook.pipShadowRadius,
+          _pipShadow,
+        );
+        canvas.drawCircle(Offset(p.x, p.y), DieLook.pipRadius, _pip);
       }
       canvas.restore();
     }

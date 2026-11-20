@@ -150,11 +150,12 @@ void main() {
     final burst =
         ConfettiBurst(origin: const Pt(7.5, 7.5), startMs: 0, seed: 5);
 
-    test('at most 60 particles', () {
-      expect(burst.count, lessThanOrEqualTo(60));
-      expect(burst.count, 60);
+    test('at most 40 particles in all, with one spark burst', () {
+      expect(burst.count, 32);
+      expect(
+          burst.count + spec.sparkCount, lessThanOrEqualTo(spec.maxParticles));
       for (var t = 0.0; t < burst.endMs; t += 100) {
-        expect(burst.sample(t).length, lessThanOrEqualTo(60));
+        expect(burst.sample(t).length, lessThanOrEqualTo(32));
       }
     });
 

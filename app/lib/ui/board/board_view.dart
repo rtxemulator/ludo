@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/pt.dart';
+import 'package:ludo/ui/core/token_look.dart';
 
 import '../../game/game_controller.dart';
 import '../theme/palette.dart';
@@ -34,7 +35,10 @@ class BoardView extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTapUp: (details) {
             final p = details.localPosition;
-            game.tapAt(Pt(p.dx / cell, p.dy / cell));
+            game.tapAt(
+              Pt(p.dx / cell, p.dy / cell),
+              reach: TokenLook.tapReach(cell),
+            );
           },
           child: Stack(
             fit: StackFit.expand,
@@ -55,15 +59,17 @@ class BoardView extends StatelessWidget {
                   painter: HomePipsPainter(game: game, palette: palette),
                 ),
               ),
-              RepaintBoundary(
-                child: CustomPaint(
-                  painter: TokenLayerPainter(
-                    game: game,
-                    palette: palette,
-                    shaders: shaders,
+              for (final part in TokenLayerPart.values)
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: TokenLayerPainter(
+                      game: game,
+                      palette: palette,
+                      shaders: shaders,
+                      part: part,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         );

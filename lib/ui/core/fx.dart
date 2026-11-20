@@ -244,7 +244,8 @@ class ConfettiPiece {
   final int colorIndex;
 }
 
-/// Win confetti: at most [MotionSpec.confettiCount] (<= 60) particles flying
+/// Win confetti: at most [MotionSpec.confettiCount] particles (and, with one
+/// home spark burst, never more than [MotionSpec.maxParticles] in all) flying
 /// radially out of [origin] and fading. Deterministic for a given [seed].
 ///
 /// There is no gravity: at a table there is no "down" (UI/UX doc, section 1).
@@ -256,7 +257,10 @@ class ConfettiBurst {
     this.colorCount = 4,
     this.spec = MotionSpec.standard,
   }) {
-    final n = math.min(spec.confettiCount, 60);
+    final n = math.min(
+      spec.confettiCount,
+      spec.maxParticles - spec.sparkCount,
+    );
     final rnd = Seeded(seed);
     for (var i = 0; i < n; i++) {
       _p.add(

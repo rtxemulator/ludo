@@ -498,13 +498,19 @@ class GameController extends ChangeNotifier {
     activeSinceMs = _now();
   }
 
+  /// Tap reach (cells, as a radius) at the old token size; the board view
+  /// passes a wider one so every token is at least a 48 dp target.
+  static const double _baseReach = 0.8;
+  double _reach = _baseReach;
+
   /// Handles a tap at board position [grid] (in cells). Returns whether a
   /// token was chosen.
   ///
   /// While a roll is due the tap only flashes the dock of the seat on turn;
   /// while a token is to be chosen, a tap on a token that cannot move nudges
   /// it (with a faint red ring and a double tick).
-  bool tapAt(Pt grid) {
+  bool tapAt(Pt grid, {double reach = _baseReach}) {
+    _reach = reach < _baseReach ? _baseReach : reach;
     if (_replay || aiTurn) {
       return false;
     }
@@ -548,7 +554,7 @@ class GameController extends ChangeNotifier {
   /// tap; both tokens of a moving blockade count.
   (int, int)? _nearestToken(Iterable<Move> moves, Pt grid) {
     (int, int)? best;
-    var bestDistance = 0.8;
+    var bestDistance = _reach;
     for (final move in moves) {
       for (final index in [
         move.tokenIndex,
@@ -589,7 +595,7 @@ class GameController extends ChangeNotifier {
 
   Move? _pickVariant(Pt grid) {
     Move? best;
-    var bestDistance = 0.9;
+    var bestDistance = _reach > 0.9 ? _reach : 0.9;
     for (var k = 0; k < variants.length; k++) {
       final d = variantPoints[k].distanceTo(grid);
       if (d <= bestDistance) {
@@ -716,7 +722,7 @@ class GameController extends ChangeNotifier {
   void _illegalTap(Pt grid) {
     int? seat;
     var index = 0;
-    var nearest = 0.8;
+    var nearest = _reach;
     for (final s in state.activeSeats) {
       for (var i = 0; i < tokensPerSeat; i++) {
         final d = resting[s][i].distanceTo(grid);

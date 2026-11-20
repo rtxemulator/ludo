@@ -10,7 +10,7 @@ class MotionSpec {
     this.yardExitMs = 220,
     this.yardExitArc = 0.6,
     this.landSquashMs = 100,
-    this.pressScale = 0.9,
+    this.pressScale = 0.86,
     this.liftScaleGain = 0.5,
     this.captureShakeMs = 220,
     this.shakeAmplitude = 0.12,
@@ -43,7 +43,9 @@ class MotionSpec {
     this.sparkSize = 0.09,
     this.pocketGlowMs = 500,
     this.coinFlipTurns = 1.5,
-    this.confettiCount = 60,
+    this.confettiCount = 32,
+    this.maxParticles = 40,
+    this.movableLift = 0.24,
     this.confettiMs = 3200,
     this.dockHandoffMs = 200,
     this.ghostOpacity = 0.45,
@@ -147,6 +149,14 @@ class MotionSpec {
 
   /// Upper bound for confetti particles (budget: <= 60).
   final int confettiCount;
+
+  /// Particles alive at once, over every effect (home sparks and confetti
+  /// can overlap at game over): confetti plus one spark burst stays within it.
+  final int maxParticles;
+
+  /// Height (cells) a token that can move rises to at the top of the
+  /// pulse; it is drawn `1 + liftScaleGain * lift` bigger (height = scale).
+  final double movableLift;
   final double confettiMs;
 
   /// A seat's die turns from ghost to live (or back) over this long.

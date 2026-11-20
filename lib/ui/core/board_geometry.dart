@@ -98,7 +98,12 @@ class BoardGeometry {
     if (n <= 1) {
       return 1;
     }
-    return math.sqrt(n).ceil() == 2 ? 0.8 : 0.62;
+    // Tokens are 18% bigger than before the polish pass, so a stack shrinks
+    // them more; the fan overlaps a little and the badge gives the count.
+    if (n == 2) {
+      return 0.74;
+    }
+    return n <= 4 ? 0.64 : 0.5;
   }
 
   /// Resting point of every token (`[seat][token]`), with stacking offsets

@@ -6,13 +6,22 @@ import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/frame_stats.dart';
 import 'package:ludo/ui/core/fx.dart';
 import 'package:ludo/ui/core/fx_scene.dart';
+import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/ui/core/pulse.dart';
+import 'package:ludo/ui/core/revert_plan.dart';
+import 'package:ludo/ui/core/token_look.dart';
 import 'package:ludo/ui/core/token_timeline.dart';
 
 import '../../game/game_controller.dart';
 import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
+
+/// Which of the three stacked layers a [TokenLayerPainter] draws. Each has its
+/// own `RepaintBoundary` in the board view: [under] (blockade tiles, legal-move
+/// glow and rings, pocket glows), [tokens] (shadows, pawns, stack badges) and
+/// [over] (dust, shockwave and ripple rings, sparks, the finish ring).
+enum TokenLayerPart { under, tokens, over }
 
 /// Draw order: resting tokens first, then captured ones flying home, then
 /// the mover on top.
@@ -27,6 +36,7 @@ class _Item {
     this.scale,
     this.layer,
     this.dim,
+    this.restLift,
   );
 
   final int seat;
@@ -38,6 +48,9 @@ class _Item {
 
   /// Opacity lost to the "no legal move" dim (`0..1`).
   final double dim;
+
+  /// Idle height (cells) of a token that can move (0 for every other).
+  final double restLift;
 }
 
 /// Dynamic layer: pawns, shadows, legal-move glow and the finish ring.
@@ -54,14 +67,16 @@ class TokenLayerPainter extends CustomPainter {
     required this.game,
     required this.palette,
     required this.shaders,
+    this.part = TokenLayerPart.tokens,
   }) : super(repaint: game.clock);
 
   final GameController game;
   final LudoPalette palette;
   final TokenShaders shaders;
+  final TokenLayerPart part;
 
   /// Pawn base-ring radius at scale 1 (grid cells).
-  static const double baseRadius = 0.38;
+  static const double baseRadius = TokenLook.baseRadius;
 
   /// Shadow growth and fade with height `h` (cells), and its radial drift.
   static const double shadowGrow = 0.35;
@@ -94,6 +109,21 @@ class TokenLayerPainter extends CustomPainter {
     final revert = game.revert;
     final revertT = now - game.revertStartMs;
 
+    if (part == TokenLayerPart.under) {
+      _paintUnder(canvas, now, state);
+    } else if (part == TokenLayerPart.tokens) {
+      _paintTokens(canvas, now, state, plan, planT, revert, revertT);
+    } else {
+      _paintOver(canvas, now, plan, planT);
+    }
+
+    canvas.restore();
+    PaintProbe.stop(probe);
+  }
+
+  /// Blockade tiles, legal-move glow and rings, destination markers and the
+  /// pocket glows: everything that sits under the pawns.
+  void _paintUnder(Canvas canvas, double now, GameState state) {
     _drawBlockades(canvas, now, state);
 
     // Legal-move glow sits under everything.
@@ -119,7 +149,34 @@ class TokenLayerPainter extends CustomPainter {
 
     _drawVariants(canvas, now);
     _drawGlows(canvas, now);
+  }
 
+  /// Tokens that can move this roll (both tokens of a moving blockade).
+  Set<int> _movableKeys() {
+    if (game.phase != GamePhase.awaitingMove) {
+      return const {};
+    }
+    return {
+      for (final m in game.glowMoves) ...[
+        m.owner * tokensPerSeat + m.tokenIndex,
+        if (m.isUnit) m.owner * tokensPerSeat + m.partnerIndex,
+      ],
+    };
+  }
+
+  /// Shadows, pawns and stack badges.
+  void _paintTokens(
+    Canvas canvas,
+    double now,
+    GameState state,
+    MoveAnimationPlan? plan,
+    double planT,
+    RevertAnimation? revert,
+    double revertT,
+  ) {
+    final movable = _movableKeys();
+    final idleLift =
+        movable.isEmpty ? 0.0 : PulseSample.movableLift(now, game.spec);
     final dimAmount = game.noMoveSeat == null
         ? 0.0
         : noMoveDim(now, game.noMoveMs, game.spec) * game.spec.noMoveDimAmount;
@@ -156,6 +213,9 @@ class TokenLayerPainter extends CustomPainter {
           scale,
           layer,
           seat == game.noMoveSeat && pose == null ? dimAmount : 0,
+          pose == null && movable.contains(seat * tokensPerSeat + i)
+              ? idleLift
+              : 0,
         ));
       }
     }
@@ -174,6 +234,19 @@ class TokenLayerPainter extends CustomPainter {
       }
     }
 
+    if (plan == null && revert == null) {
+      _drawBadges(canvas, state);
+    }
+  }
+
+  /// Dust, shockwave and ripple rings, sparks and the finish ring, over the
+  /// pawns.
+  void _paintOver(
+    Canvas canvas,
+    double now,
+    MoveAnimationPlan? plan,
+    double planT,
+  ) {
     _drawFx(canvas, now);
 
     // Finish ring.
@@ -190,9 +263,59 @@ class TokenLayerPainter extends CustomPainter {
             Offset(ring.center.x, ring.center.y), r.radius, _ring);
       }
     }
+  }
 
-    canvas.restore();
-    PaintProbe.stop(probe);
+  final Map<int, TextPainter> _digits = {};
+  final Paint _badge = Paint();
+
+  /// Count badge on every cell that holds [TokenLook.badgeFrom] tokens or
+  /// more (any seats): a palette-coloured pill with the number.
+  void _drawBadges(Canvas canvas, GameState state) {
+    final counts = <String, (Pt, int)>{};
+    for (final seat in state.activeSeats) {
+      for (var i = 0; i < tokensPerSeat; i++) {
+        final position = state.tokens[seat][i];
+        if (!isOnTrack(position) && !isInHomeColumn(position)) {
+          continue;
+        }
+        final c = _geo.cellCenter(seat, position, i);
+        final key = '${c.x},${c.y}';
+        final prev = counts[key];
+        counts[key] = (c, (prev?.$2 ?? 0) + 1);
+      }
+    }
+    for (final (c, n) in counts.values) {
+      if (!TokenLook.showBadge(n)) {
+        continue;
+      }
+      final centre = Offset(
+        c.x + TokenLook.badgeOffset,
+        c.y - TokenLook.badgeOffset,
+      );
+      _badge.color = palette.text;
+      canvas.drawCircle(centre, TokenLook.badgeRadius, _badge);
+      final tp = _digits.putIfAbsent(
+        n,
+        () => TextPainter(
+          text: TextSpan(
+            text: '$n',
+            style: TextStyle(
+              color: palette.background,
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              height: 1,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout(),
+      );
+      // Laid out at 30 px and drawn scaled, so glyphs stay crisp.
+      canvas.save();
+      canvas.translate(centre.dx, centre.dy);
+      canvas.scale(0.0125);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
+    }
   }
 
   /// Pocket glow of a token that just reached home (under the pawns).
@@ -336,11 +459,13 @@ class TokenLayerPainter extends CustomPainter {
   /// drifts away from the board centre (radially symmetric parallax).
   void _drawShadow(Canvas canvas, _Item item) {
     final pose = item.pose;
-    final lift = pose?.lift ?? 0;
+    final lift = pose?.lift ?? item.restLift;
     final poseScale = pose?.scale ?? 1;
     // The pose scale folds in height; the shadow keeps only the press / finish
-    // shrink and handles height itself.
-    final onGround = poseScale / (1 + game.spec.liftScaleGain * lift);
+    // shrink and handles height itself. A resting token (idle lift) has no
+    // pose scale to take out.
+    final onGround =
+        pose == null ? 1.0 : poseScale / (1 + game.spec.liftScaleGain * lift);
     final r = baseRadius * item.scale * onGround * (1 + shadowGrow * lift);
     final alpha =
         (pose?.opacity ?? 1) * (1 - item.dim) / (1 + shadowFade * lift);
@@ -369,11 +494,11 @@ class TokenLayerPainter extends CustomPainter {
     canvas.save();
     canvas.translate(cx, cy);
     canvas.save();
-    canvas.scale(r * 1.55);
+    canvas.scale(r * TokenLook.shadowPenumbraScale);
     _shadow.shader = shaders.shadowPenumbra;
     canvas.drawCircle(Offset.zero, 1, _shadow);
     canvas.restore();
-    canvas.scale(r);
+    canvas.scale(r * TokenLook.shadowCoreScale);
     _shadow.shader = shaders.shadowCore;
     canvas.drawCircle(Offset.zero, 1, _shadow);
     canvas.restore();
@@ -386,7 +511,9 @@ class TokenLayerPainter extends CustomPainter {
     final opacity = (pose?.opacity ?? 1) * (1 - item.dim);
     final ground = Offset(item.pos.x, item.pos.y);
     // Height is already inside the pose scale; never a Y offset.
-    final r = baseRadius * item.scale * (pose?.scale ?? 1);
+    final r = baseRadius *
+        item.scale *
+        (pose?.scale ?? 1 + game.spec.liftScaleGain * item.restLift);
 
     final faded = opacity < 1;
     if (faded) {

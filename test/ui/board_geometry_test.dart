@@ -110,8 +110,10 @@ void main() {
       }
     }
     expect(BoardGeometry.stackScale(1), 1);
-    expect(BoardGeometry.stackScale(3), 0.8);
-    expect(BoardGeometry.stackScale(5), lessThan(0.8));
+    expect(BoardGeometry.stackScale(2), 0.74);
+    expect(BoardGeometry.stackScale(3), 0.64);
+    expect(BoardGeometry.stackScale(4), 0.64);
+    expect(BoardGeometry.stackScale(5), lessThan(0.64));
   });
 
   test('resting points: lone token sits on its cell centre', () {

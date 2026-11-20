@@ -245,12 +245,12 @@ void main() {
       expect(scene.isEmpty, isTrue);
     });
 
-    test('particle budget: confetti plus every spark stays <= 60 + 8 x 4', () {
+    test('particle budget: confetti plus a spark burst stays <= 40', () {
       final burst = ConfettiBurst(origin: const Pt(0, 0), startMs: 0, seed: 3);
-      expect(burst.count, lessThanOrEqualTo(60));
-      // A move spawns at most one spark burst, so even four seats finishing
-      // at once cannot exceed the budget by much.
-      expect(spec.sparkCount * 4 + burst.count, lessThanOrEqualTo(92));
+      // A move spawns at most one spark burst, and the game-over move is the
+      // only one that overlaps the confetti.
+      expect(
+          spec.sparkCount + burst.count, lessThanOrEqualTo(spec.maxParticles));
     });
   });
 

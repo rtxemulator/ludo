@@ -69,3 +69,7 @@ Prompt the agent:
 ## 5. Milestone 2 polish round
 
 Design and work plan for the post-device-test polish (haptics, 3D dice, docks, frame, token look, FX, menu, face-to-face orientation, banked-roll UI contract): `docs/ludo-ui-ux.md`. Work is split into 4 chats (section 12 of that doc).
+
+## Polish pass 1 (`polish-1`, after Milestone 6)
+
+Visuals, feel and pacing only; engine, storage and AI untouched; no new packages or assets. Steps (each committed signed, CI dispatched by hand because `ci.yml` only triggers on `main` and `milestone-*`): AGP bump to 9.1.1 (main CI had gone red when Flutter raised its minimum), board, tokens, dice and bank, docs. Details and decisions: docs/ludo-ui-ux.md section 14. Open until the device review: frame timing on the profile APK and the device checklist in the polish report.

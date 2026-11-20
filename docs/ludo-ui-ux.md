@@ -79,7 +79,7 @@ Implementation: one pure function `seatTextTurns(layout, seat, mode) -> quarter 
 ### 4.1 Behaviour
 
 - The active seat's dock shows a fresh die with an **idle bob** (+-0.04 cell, 1.6 s) and soft halo. Tapping the die or anywhere in the dock zone rolls.
-- Other seats' docks keep a **ghost die**: their last result, 45% opacity, 0.8 scale, desaturated, no bob. Cleared on new game.
+- Other seats' docks keep a **ghost die**: their last result, 40% opacity, 0.72 scale, in the seat's own colour (no desaturation, so never muddy grey), no bob. Cleared on new game.
 - When a seat becomes active, its ghost lifts and becomes the live die (handoff 200 ms) and the previous seat's die settles into its ghost state.
 - Tapping a non-active dock does a short dock pulse, nothing else.
 - Tapping the die mid-roll skips to the settle (quick-roll).
@@ -147,7 +147,7 @@ Replace the "ball with shadow below" look with a **top-down pawn disc**:
 | Capture | impact shockwave ring (r 0.4 -> 1.2, 260 ms); victim flips like a coin (`scaleX = cos(2 pi 1.5 u)`) while flying home, lands with press + ripple | heavy double |
 | Reach home | token settles into pocket, pocket glow (500 ms), 8 radial sparks (0.9 cell, fade), ring | rising triple |
 | Roll a six | gold halo on the die | medium |
-| Win | confetti (<= 60 deterministic particles), per-seat rank badges | pattern |
+| Win | confetti (<= 32 deterministic particles; total particles on screen <= 40), per-seat rank badges | pattern |
 
 Toasts: small pill at the active dock, rotated per section 3, 1.2 s, fades; text only for transient notices.
 
@@ -195,7 +195,7 @@ The rules chat decides the rules; this UI must be data-driven so it works whatev
 
 UI built on that contract:
 
-- **Roll tray** beside the dock: banked values as small die chips (1.1 cells) in a fan, oriented per section 3; selected chip lifts and glows.
+- **Roll tray** beside the dock: banked values as die chips with a big numeral (1.3 cells, less where the margin is shallow) in a fan, oriented per section 3; selected chip lifts and glows.
 - Legal glows follow the selected chip; tapping a token spends the selected value; with a single option it auto-selects.
 - Spent chip flies to the token and dissolves; a new roll appends a chip with a mini pop.
 - If several values are playable on the tapped token the tray pulses to prompt a choice.
@@ -255,7 +255,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 - Layers (bottom to top): felt (+ soft centred frame shadow), cached frame + board, yard glow, tokens, docks, two temporary round buttons. The table runs edge to edge and applies the system insets itself.
 - Yards are plain 6 x 6 rects clipped to the rounded board, so only the outer corners are round. Inactive yards get a 15% wash-out overlay (dynamic layer, so the board stays cached).
 - Wood: radial base (light mid-sides, dark corners), 10 seeded strokes per side clipped to the mitred band, mitre seams, dark outer + light inner hairline. Concentric radii (outer = 0.4 + 0.45).
-- Pawn: base ring 0.38 cell; body, dome and specular dot as in section 6; the optional emblem is not drawn yet. Shadow = core + penumbra shaders, alpha applied with a `dstIn` colour filter; drawn for all pawns before any pawn; draw order resting, victims, mover.
+- Pawn: base ring 0.45 cell (0.38 before polish pass 1; see section 14); body, dome and specular dot as in section 6; the optional emblem is not drawn yet. Shadow = core + penumbra shaders, alpha applied with a `dstIn` colour filter; drawn for all pawns before any pawn; draw order resting, victims, mover.
 - The roll finishes at the die's **settle** (920 ms), not at the end of the reveal; the reveal ring keeps playing in the dock afterwards (`rollerSeat` + `dice` stay until the next roll). Quick-roll sets the clock to the settle and skips the impact haptics (only the settle click plays).
 - Idle bob is a +-4% scale wobble (height = scale), not a Y offset. A seat with no roll yet shows a fresh die (face 1) only while it is on turn.
 - The die's dock frame is applied by turning the canvas by `turnsForEdge`; the shadow drift is computed on screen with `rotateQuarterTurns`.
@@ -267,7 +267,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 - Catalogue wiring: dust ring at every landing; yard exit = ring contracting on the yard spot at t=0 + ripple at the start square on landing; capture = shockwave on the victim square at the impact, victim shakes, flips (`TokenPose.flipX = |cos|`, min 0.04) while flying, lands with the uniform press (+100 ms in `TokenTimeline.captured`) and a dust ring at its yard spot; home = 8 sparks + pocket glow (`shaders.glow`) + the old finish ring; six halo was already P4 (`Dice3dPose.goldOpacity`); dice dust rings at each of the three impacts (skipped by quick-roll).
 - Illegal tap (`GameController.tapAt`): during a choice, a tap within 0.8 cell of a token that has no move nudges it sideways (`nudgeOffset`, 160 ms) with a faint red ring and the `illegal` haptic; while a roll is due, a board tap flashes the active dock. No-move: `noMove` haptic (new, soft tick), die shakes sideways in its dock frame, the controlled seat's tokens dim for 200 ms, and the turn glow now cross-fades from one yard to the next (`DockLook.live`) instead of jumping.
 - Toasts ("No move", "Three sixes") and game-over rank badges are **painted** (`OverlayPainter`, `TextPainter` cache), not `Text` widgets: a canvas rotation by `seatTextTurns` turns each to face its seat, and the widget test "no text on screen" still holds. Toast pill sits on the strip between the die and the player's edge; the badge is centred on the dock.
-- Confetti: `ConfettiBurst` from the board centre (<= 60 pieces, seat colours), started at game over; the ticker keeps running for `confettiMs` after game over, then `GameController.tick` notifies once so the screen stops it. Reduced motion: no confetti, badges appear at full size.
+- Confetti: `ConfettiBurst` from the board centre (<= 32 pieces, seat colours), started at game over; the ticker keeps running for `confettiMs` after game over, then `GameController.tick` notifies once so the screen stops it. Reduced motion: no confetti, badges appear at full size.
 - Menu sheet and game-over card are `TurnedBox` squares (250 ms shortest-way turn) so a quarter turn never overflows; `sharedUiTurns(layout, activeSeat | winner, mode, autoRotate)` drives them. Menu: New game, Settings, Rules (placeholder), Close. Game over: Rematch + Menu facing the winner.
 - Settings (`app/lib/settings/game_settings.dart`, in memory): haptics, reduce motion (System / On / Off), UI orientation (Table / Fixed), auto-rotate shared UI (table only), frame timing overlay. The haptics test sheet and the temporary round buttons are gone.
 - P7: `FrameTimingOverlay` (`SchedulerBinding.addTimingsCallback`, mounted only while the setting is on) shows fps, dropped/slow frames, UI/raster times, p95/worst and the game's own paint time (`PaintProbe`, 4 ms budget). CI now also builds and uploads `ludo-arm64-profile` (profile-mode APK). Static fixes for per-frame allocations: dock halos and the yard turn light reuse one unit shader per colour (alpha through a `dstIn` filter) instead of building a gradient every frame. **No on-device numbers yet**: read them with the profile APK and the overlay (checklist in the chat C hand-off).
@@ -275,7 +275,7 @@ Long chats re-read their whole history every turn, which burns usage and drifts.
 **Chat D (P8), done.** Branch `milestone-2-roll-tray` (off `milestone-2-banked-rolls`, which carries the engine change). Nothing in `lib/engine/` was touched. Decisions the doc left open:
 
 - Pure core (`lib/ui/core/`, tested with `dart test`): `bank_tray.dart` (`BankTray`: chips with stable ids, pop / slide / select / spend / wipe / revert as functions of time; `fanX`, `hitChip`), `bank_choice.dart` (`BankChoice`: selection, glow set, what a tap on a token or chip means), `revert_plan.dart` (`RevertAnimation`: tokens gliding back after a dead end, `TokenTimeline.glide`), `TraySpec` in `motion_spec.dart` (every number), `DockLayout.tray / chipSize / trayOuter` in `table_layout.dart`, `HapticEvent.select`.
-- Tray placement: a strip **beyond the dock on the player's side** (6 cells long, 1.5 deep, chips 1.1 cells) when the margin has at least 1 cell to spare (every phone size, landscape included); otherwise the strip of the dock between the die and the player's edge (portrait tablets, near-square screens, yards), where chips shrink to fit (0.4 to 0.7 cell). Chips are laid out in the dock frame and turned to the edge; their **faces** turn with `seatTextTurns`. Fan: pitch 1.12 chips, tilt 0.06 rad per slot (cap 0.3), 0.04 sag; a full tray overlaps its chips (pitch down to 0.25) instead of overflowing.
+- Tray placement: a strip **beyond the dock on the player's side** (6 cells long, 1.5 deep, chips 1.3 cells, capped at 0.8 of the strip depth: about 1.2 on a phone) when the margin has at least 1 cell to spare (every phone size, landscape included); otherwise the strip of the dock between the die and the player's edge (portrait tablets, near-square screens, yards), where chips shrink to fit (0.4 to 0.7 cell). Chips are laid out in the dock frame and turned to the edge; their **faces** turn with `seatTextTurns`. Fan: pitch 1.12 chips, tilt 0.06 rad per slot (cap 0.3), 0.04 sag; a full tray overlaps its chips (pitch down to 0.25) instead of overflowing.
 - Selection: with a single playable value its chip is selected automatically; with several nothing is selected and every legal token glows. Tapping a chip selects it (lift 1.18x + glow) and the glow narrows to its value; tapping it again deselects. Tapping a token spends the selected die; with nothing selected a token with one option spends it, a token with several options prompts (the tray swells once). A token that cannot use the selected die but can use another moves the selection to that chip without spending. A chip with no legal move shakes the tray. Tap targets: the whole tray strip, nearest chip within 0.9 chips.
 - Spend: the chip at the spent `dieIndex` flies to the token's resting cell while the token hops (300 ms, shrinks to 0.5, dissolves over the last 35%, extra height as scale). A forced single move waits 280 ms so its chip is seen first. New dice pop in (200 ms overshoot) as the die settles. Triple six: chips shake then burst, 45 ms apart, with the usual "Three sixes" toast. Dead end: the last die joins the bank for 260 ms, then the chips shrink away while every token the turn moved glides back (380 ms, 40 ms apart, dust at each landing) and the turn passes when the last one lands; toast "Turn undone". Reduced motion: no flight, glide, shake, swell or hold; chips fade in place.
 - While dice are to be spent the live die is dimmed to 60% and a tap on it shakes the die and the tray ("bank full" stand-in, `illegal` haptic).
@@ -298,3 +298,17 @@ Starter prompt (replace the steps):
 - Dock position: table margin beside the yard (this doc, default) vs inside the yard. Say if you prefer inside.
 - ~~Rules chat answers to the section 10 list.~~ Answered (see "Answers as built" in section 10); `maxBank` does not exist.
 - Tablet-portrait and square screens use small chips (inner tray); say if that needs a better home (e.g. shrinking the board further).
+
+## 14. Polish pass 1 (branch `polish-1`, visuals / feel / pacing, no rule changes)
+
+Pure numbers live in `lib/ui/core/board_polish.dart`, `token_look.dart`, `DieLook` (in `dock_look.dart`) and `MotionSpec`; all are unit tested. `lib/engine`, `lib/storage` and `lib/ai` are untouched. No new settings were needed.
+
+**Board.** Cells are rounded tiles (radius 0.09) with a gap of about 1.5 px (`BoardPolish.cellGap`, clamped 0.03 to 0.10 cell) and a faint symmetric bevel (darker edge, lighter inner line; one overhead light, no lit corner). Start squares and home columns carry chevrons toward the centre (`towardCentre`, colour `LudoPalette.onSeat`: dark on light seat colours, light on dark). The yard quadrants stay flush with the path arms (the earlier gap fix); the inner panel is recessed with a symmetric edge line and recessed token spots. The tokens-home count is four pips per seat in its centre triangle (`HomePipsPainter`, own layer, repaints only on state changes; pips have no "up", so the count reads from every seat). The static board (frame, yards, cells, chevrons, triangles) is one `RepaintBoundary` raster.
+
+**Tokens.** Base ring 0.45 (+18%). Contact shadow: tight core plus a 1.7x penumbra. A token that can move rises with the legal-move pulse (`MotionSpec.movableLift` 0.24, height = scale, reduced motion: steady half lift); all others stay flat. Landing is a uniform press to 0.86 (no vertical squash: the pawn is seen from above). Stack scales: 2 tokens 0.74, 3 to 4 0.64, 5+ 0.5, fanned on the existing offsets; from 3 tokens a count badge (palette text on palette background) sits at the cell's upper-right corner. Blockades keep their existing linked ring. Tap reach is `TokenLook.tapReach(cellPx)`: at least a 48 dp target, never below 0.8 cell. Repeated-tap cycling was not added: tokens of one stack are interchangeable and a tap already picks the nearest *movable* token, so cycling would change nothing.
+
+**Layers.** `BoardView` stacks, bottom to top, each in its own `RepaintBoundary`: yard glow, home pips, `TokenLayerPart.under` (blockades, legal glow and rings, pocket glows), `tokens` (shadows, pawns, badges), `over` (dust, shockwave and ripple rings, sparks, finish ring). `PaintProbe` sums them, so the 4 ms budget covers all.
+
+**Dice and bank.** Die faces: soft light in the middle, darker rim, a highlight line inside the rim, a dark ring around every pip (`DieLook`). The roll already was a toss arc, two bounces and a settle (`Dice3dSpec`), so it is unchanged. Tapping anywhere on the tray rolls while a roll is due (the dock already did). Bank chips show a numeral (readable from the seat, laid out at 100 px and drawn scaled) on a lit face; the selected chip has a stronger glow and ring. Tap-to-choose which roll to spend already existed (`chipTap`). Ghost dice: 40% opacity, 0.72 scale, seat colour.
+
+**Particles.** `MotionSpec.maxParticles` 40: confetti 32 plus one spark burst of 8.

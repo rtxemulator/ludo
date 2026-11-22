@@ -144,7 +144,10 @@ void main() {
           game.roll();
         case GamePhase.awaitingMove:
           final move = game.legal.first;
-          expect(game.tapAt(game.resting[move.owner][move.tokenIndex]), isTrue);
+          final at = game.resting[move.owner][move.tokenIndex];
+          // A person previews with one tap and plays with the next.
+          game.tapAt(at);
+          expect(game.tapAt(at), isTrue);
         case GamePhase.rolling:
         case GamePhase.moving:
           t += 1000;

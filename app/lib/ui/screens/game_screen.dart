@@ -83,6 +83,7 @@ class _GameScreenState extends State<GameScreen>
     // Settings outlive a match (they belong to the app): apply them to this
     // one before the first frame.
     _game.feedback.enabled = _settings.haptics;
+    _game.autoMoveSingle = _settings.autoMoveSingle;
     _game.addListener(_syncTicker);
     _settings.addListener(_onSettings);
     // Sound settings apply live; the music plays while this screen is up.
@@ -94,6 +95,7 @@ class _GameScreenState extends State<GameScreen>
   /// Pushes the settings into the controller (haptics toggle, motion spec).
   void _onSettings() {
     _game.feedback.enabled = _settings.haptics;
+    _game.autoMoveSingle = _settings.autoMoveSingle;
     _game.spec = _settings.motionSpec(systemReduced: _systemReduced);
     _syncTicker();
   }

@@ -6,6 +6,7 @@ import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/frame_stats.dart';
 import 'package:ludo/ui/core/fx.dart';
 import 'package:ludo/ui/core/fx_scene.dart';
+import 'package:ludo/ui/core/move_preview.dart';
 import 'package:ludo/ui/core/move_plan.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/ui/core/pulse.dart';
@@ -248,6 +249,7 @@ class TokenLayerPainter extends CustomPainter {
     double planT,
   ) {
     _drawFx(canvas, now);
+    _drawPreview(canvas, now);
 
     // Finish ring.
     final ring = plan?.ring;
@@ -261,6 +263,81 @@ class TokenLayerPainter extends CustomPainter {
               );
         canvas.drawCircle(
             Offset(ring.center.x, ring.center.y), r.radius, _ring);
+      }
+    }
+  }
+
+  /// The move a tap on a token is previewing: a ring on the selected token,
+  /// dots on the squares it would cross, a ring where it would land, and for
+  /// a capture a double ring with four ticks (a different shape, not only a
+  /// different colour). Every mark has a dark casing so it reads on any square.
+  void _drawPreview(Canvas canvas, double now) {
+    final p = game.preview;
+    if (p == null || game.phase != GamePhase.awaitingMove) {
+      return;
+    }
+    final spec = game.spec;
+    final since = now - game.previewStartMs;
+    final owner = p.move.owner;
+    final color = palette.seatLight(owner);
+    int a(double v) => (v * 255).round().clamp(0, 255);
+
+    // The token that is selected.
+    final from = Offset(p.origin.x, p.origin.y);
+    _ring
+      ..strokeWidth = 0.05
+      ..color = palette.text.withAlpha(210);
+    canvas.drawCircle(from, MovePreview.ringRadius, _ring);
+
+    // The squares it would cross.
+    for (var i = 0; i < p.trail.length; i++) {
+      final alpha = p.dotAlpha(i, since, spec);
+      if (alpha <= 0.01) {
+        continue;
+      }
+      final c = Offset(p.trail[i].x, p.trail[i].y);
+      _spark.color = palette.background.withAlpha(a(0.55 * alpha));
+      canvas.drawCircle(c, MovePreview.dotRadius + 0.04, _spark);
+      _spark.color = color.withAlpha(a(alpha));
+      canvas.drawCircle(c, MovePreview.dotRadius, _spark);
+    }
+
+    // Where it would land.
+    final look = p.look(since, spec);
+    if (look.ringAlpha <= 0.01) {
+      return;
+    }
+    final to = Offset(p.destination.x, p.destination.y);
+    final r = MovePreview.ringRadius * look.ringScale;
+    _ring
+      ..strokeWidth = MovePreview.ringStroke + 0.06
+      ..color = palette.background.withAlpha(a(0.55 * look.ringAlpha));
+    canvas.drawCircle(to, r, _ring);
+    _ring
+      ..strokeWidth = MovePreview.ringStroke
+      ..color = color.withAlpha(a(look.ringAlpha));
+    canvas.drawCircle(to, r, _ring);
+    if (p.isCapture) {
+      final outer = MovePreview.captureOuterRadius * look.ringScale;
+      _ring
+        ..strokeWidth = MovePreview.captureStroke + 0.05
+        ..color = palette.background.withAlpha(a(0.55 * look.ringAlpha));
+      canvas.drawCircle(to, outer, _ring);
+      _ring
+        ..strokeWidth = MovePreview.captureStroke
+        ..color = palette.text.withAlpha(a(look.ringAlpha));
+      canvas.drawCircle(to, outer, _ring);
+      for (var k = 0; k < 4; k++) {
+        final angle = math.pi / 4 + k * math.pi / 2;
+        final dx = math.cos(angle);
+        final dy = math.sin(angle);
+        final inner = MovePreview.tickInner * look.ringScale;
+        final tip = MovePreview.tickOuter * look.ringScale;
+        canvas.drawLine(
+          to.translate(dx * inner, dy * inner),
+          to.translate(dx * tip, dy * tip),
+          _ring,
+        );
       }
     }
   }

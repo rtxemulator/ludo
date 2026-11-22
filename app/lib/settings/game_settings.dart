@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:ludo/ui/core/motion_spec.dart';
+import 'package:ludo/ui/core/pacing.dart' show AnimationSpeed;
 import 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
 import 'package:ludo/ui/core/sfx.dart' show clampVolume;
 import 'package:ludo/ui/core/table_layout.dart' show UiOrientation;
 
 export 'package:flutter/material.dart' show ThemeMode;
+export 'package:ludo/ui/core/pacing.dart' show AnimationSpeed;
 export 'package:ludo/ui/core/palette_spec.dart' show PaletteId;
 export 'package:ludo/ui/core/table_layout.dart' show UiOrientation;
 
@@ -33,6 +35,8 @@ class GameSettings extends ChangeNotifier {
     double musicVolume = defaultMusicVolume,
     ThemeMode themeMode = ThemeMode.system,
     PaletteId paletteId = PaletteId.classic,
+    bool autoMoveSingle = false,
+    AnimationSpeed animationSpeed = AnimationSpeed.normal,
   })  : _haptics = haptics,
         _reduceMotion = reduceMotion,
         _orientation = orientation,
@@ -43,7 +47,9 @@ class GameSettings extends ChangeNotifier {
         _musicEnabled = musicEnabled,
         _musicVolume = _volume(musicVolume, defaultMusicVolume),
         _themeMode = themeMode,
-        _paletteId = paletteId;
+        _paletteId = paletteId,
+        _autoMoveSingle = autoMoveSingle,
+        _animationSpeed = animationSpeed;
 
   bool _haptics;
   ReduceMotion _reduceMotion;
@@ -56,6 +62,8 @@ class GameSettings extends ChangeNotifier {
   double _musicVolume;
   ThemeMode _themeMode;
   PaletteId _paletteId;
+  bool _autoMoveSingle;
+  AnimationSpeed _animationSpeed;
 
   /// A volume in `0..1`: out of range is clamped, not a number falls back.
   static double _volume(double v, double fallback) =>
@@ -92,6 +100,13 @@ class GameSettings extends ChangeNotifier {
   /// The chosen palette. Presentation only.
   PaletteId get paletteId => _paletteId;
 
+  /// A seat with exactly one legal move plays it without a tap. Off by
+  /// default: a tap on the token previews the move, a second tap plays it.
+  bool get autoMoveSingle => _autoMoveSingle;
+
+  /// How fast hops, dice and effects play (and the AI thinks).
+  AnimationSpeed get animationSpeed => _animationSpeed;
+
   set haptics(bool v) => _set(_haptics != v, () => _haptics = v);
   set reduceMotion(ReduceMotion v) =>
       _set(_reduceMotion != v, () => _reduceMotion = v);
@@ -114,6 +129,10 @@ class GameSettings extends ChangeNotifier {
 
   set themeMode(ThemeMode v) => _set(_themeMode != v, () => _themeMode = v);
   set paletteId(PaletteId v) => _set(_paletteId != v, () => _paletteId = v);
+  set autoMoveSingle(bool v) =>
+      _set(_autoMoveSingle != v, () => _autoMoveSingle = v);
+  set animationSpeed(AnimationSpeed v) =>
+      _set(_animationSpeed != v, () => _animationSpeed = v);
 
   void _set(bool changed, VoidCallback apply) {
     if (changed) {
@@ -122,13 +141,26 @@ class GameSettings extends ChangeNotifier {
     }
   }
 
-  /// The motion spec to use given the platform's reduce-motion flag.
-  MotionSpec motionSpec({required bool systemReduced}) {
+  static final MotionSpec _fast =
+      MotionSpec.standard.scaled(AnimationSpeed.fast.factor);
+
+  /// The motion spec to use given the platform's reduce-motion flag and the
+  /// animation speed ([applySpeed] false for replays, which have their own
+  /// speed control). Reduced motion ignores the speed: it is already brief.
+  MotionSpec motionSpec({
+    required bool systemReduced,
+    bool applySpeed = true,
+  }) {
     final reduced = switch (_reduceMotion) {
       ReduceMotion.system => systemReduced,
       ReduceMotion.on => true,
       ReduceMotion.off => false,
     };
-    return reduced ? MotionSpec.reduced : MotionSpec.standard;
+    if (reduced) {
+      return MotionSpec.reduced;
+    }
+    return applySpeed && _animationSpeed == AnimationSpeed.fast
+        ? _fast
+        : MotionSpec.standard;
   }
 }

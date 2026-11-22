@@ -102,7 +102,8 @@ void main() {
     game.tick();
     expect(game.phase, GamePhase.awaitingRoll);
 
-    t = 800;
+    // The think time is random, 400 to 900 ms.
+    t = 1000;
     game.tick();
     expect(game.phase, GamePhase.rolling);
     expect(game.rollerSeat, 0);

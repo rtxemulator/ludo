@@ -3,6 +3,7 @@ import 'package:ludo/ai/ai.dart';
 import 'package:ludo/engine/ludo_engine.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
+import 'package:ludo/ui/core/pacing.dart';
 
 import 'package:ludo_app/game/game_controller.dart';
 
@@ -139,15 +140,17 @@ void main() {
     rig.untilAsked();
     final asked = rig.t;
     expect(rig.game.phase, GamePhase.awaitingMove);
-    while (rig.t - asked < GameController.aiMoveDelayMs - 20) {
+    // The think time is random, 400 to 900 ms: never shorter than 400.
+    while (rig.t - asked < Pacing.thinkMinMs - 20) {
       rig.step();
       expect(rig.game.phase, GamePhase.awaitingMove);
     }
     expect(
-      rig.until(() => rig.game.phase == GamePhase.moving, maxFrames: 20),
+      rig.until(() => rig.game.phase == GamePhase.moving, maxFrames: 80),
       isTrue,
     );
-    expect(rig.t - asked, greaterThanOrEqualTo(GameController.aiMoveDelayMs));
+    expect(rig.t - asked, greaterThanOrEqualTo(Pacing.thinkMinMs));
+    expect(rig.t - asked, lessThanOrEqualTo(Pacing.thinkMaxMs + 32));
     rig.game.dispose();
   });
 

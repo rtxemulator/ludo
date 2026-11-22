@@ -32,6 +32,8 @@ class SettingsStore {
   static const String musicVolumeKey = 'settings.musicVolume';
   static const String themeModeKey = 'settings.themeMode';
   static const String paletteIdKey = 'settings.paletteId';
+  static const String autoMoveSingleKey = 'settings.autoMoveSingle';
+  static const String animationSpeedKey = 'settings.animationSpeed';
   static const String setupKey = 'setup.last';
 
   /// The saved settings, defaults for anything missing or bad.
@@ -50,6 +52,9 @@ class SettingsStore {
       musicVolume: _volume(musicVolumeKey) ?? defaultMusicVolume,
       themeMode: _enum(themeModeKey, ThemeMode.values) ?? ThemeMode.system,
       paletteId: _enum(paletteIdKey, PaletteId.values) ?? PaletteId.classic,
+      autoMoveSingle: _bool(autoMoveSingleKey) ?? false,
+      animationSpeed: _enum(animationSpeedKey, AnimationSpeed.values) ??
+          AnimationSpeed.normal,
     );
   }
 
@@ -67,6 +72,11 @@ class SettingsStore {
       await _prefs.setDouble(musicVolumeKey, settings.musicVolume);
       await _prefs.setString(themeModeKey, settings.themeMode.name);
       await _prefs.setString(paletteIdKey, settings.paletteId.name);
+      await _prefs.setBool(autoMoveSingleKey, settings.autoMoveSingle);
+      await _prefs.setString(
+        animationSpeedKey,
+        settings.animationSpeed.name,
+      );
     } on Object catch (e) {
       debugPrint('Could not save settings: $e');
     }

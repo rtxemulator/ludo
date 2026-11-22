@@ -69,7 +69,10 @@ class _ReplayScreenState extends State<ReplayScreen>
 
   void _onSettings() {
     _replay.game.feedback.enabled = _settings.haptics;
-    _replay.game.spec = _settings.motionSpec(systemReduced: _systemReduced);
+    _replay.game.spec = _settings.motionSpec(
+      systemReduced: _systemReduced,
+      applySpeed: false,
+    );
     _syncTicker();
   }
 
@@ -87,7 +90,10 @@ class _ReplayScreenState extends State<ReplayScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _systemReduced = MediaQuery.disableAnimationsOf(context);
-    _replay.game.spec = _settings.motionSpec(systemReduced: _systemReduced);
+    _replay.game.spec = _settings.motionSpec(
+      systemReduced: _systemReduced,
+      applySpeed: false,
+    );
   }
 
   @override

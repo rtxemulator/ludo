@@ -109,6 +109,9 @@ void main() {
     final game = table();
     game.debugLoad(withPair(game, dice: 3));
     expect(game.glowMoves.map((m) => m.tokenIndex), [0, 1]);
+    // First tap previews, the second plays it.
+    expect(game.tapAt(game.resting[0][0]), isFalse);
+    expect(game.preview, isNotNull);
     expect(game.tapAt(game.resting[0][0]), isTrue);
     expect(game.phase, GamePhase.moving);
     settle(game);
@@ -122,7 +125,8 @@ void main() {
     game.debugLoad(withPair(game, dice: 4));
     expect(game.legal.every((m) => m.isUnit), isTrue);
     expect(game.glowMoves.map((m) => m.tokenIndex).toSet(), {0, 1});
-    // Only one way to move: a tap starts it.
+    // Only one way to move: a tap previews it, a second tap starts it.
+    expect(game.tapAt(game.resting[0][1]), isFalse);
     expect(game.tapAt(game.resting[0][1]), isTrue);
     settle(game);
     expect(game.state.tokens[0].take(2), [12, 12]);

@@ -38,6 +38,8 @@ void main() {
       for (final row in [
         'Haptics',
         'Reduce motion',
+        'Animation speed',
+        'Auto-move a single option',
         'UI orientation',
         'Auto-rotate menu to active seat',
         'Sound effects',

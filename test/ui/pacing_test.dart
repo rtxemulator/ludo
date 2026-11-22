@@ -122,6 +122,12 @@ void main() {
       expect(ThinkDelay().next(MotionSpec.reduced), Pacing.reducedThinkMs);
     });
 
+    test('a tap skips only a sequence with more than 250 ms left', () {
+      expect(Pacing.skipMinRemainingMs, 250);
+      // Shorter than the dice reveal tail plus a hop landing: a tap acts.
+      expect(Pacing.skipMinRemainingMs, greaterThan(200));
+    });
+
     test('the no-move hold is about 600 ms at normal speed', () {
       expect(Pacing.noMoveMs(standard), 600);
       expect(

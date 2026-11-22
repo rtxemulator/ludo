@@ -133,6 +133,11 @@ class Pacing {
   static const double thinkMinMs = 400;
   static const double thinkMaxMs = 900;
 
+  /// A tap skips a running sequence only when more than this is left of it:
+  /// a hop that is about to land is not worth cutting short (and a double
+  /// tap must not skip the move it just made).
+  static const double skipMinRemainingMs = 250;
+
   /// Reduced motion: a short, fixed think time.
   static const double reducedThinkMs = 250;
 

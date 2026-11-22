@@ -28,6 +28,8 @@ void main() {
     expect(settings.musicVolume, 0.4);
     expect(settings.themeMode, ThemeMode.system);
     expect(settings.paletteId, PaletteId.classic);
+    expect(settings.autoMoveSingle, isFalse);
+    expect(settings.animationSpeed, AnimationSpeed.normal);
     expect(store.loadSetup(), MatchSetup.hotSeat());
   });
 
@@ -45,6 +47,8 @@ void main() {
       musicVolume: 0.9,
       themeMode: ThemeMode.dark,
       paletteId: PaletteId.highContrast,
+      autoMoveSingle: true,
+      animationSpeed: AnimationSpeed.fast,
     );
     await store.saveSettings(settings);
 
@@ -61,6 +65,13 @@ void main() {
     expect(loaded.musicVolume, 0.9);
     expect(loaded.themeMode, ThemeMode.dark);
     expect(loaded.paletteId, PaletteId.highContrast);
+    expect(loaded.autoMoveSingle, isTrue);
+    expect(loaded.animationSpeed, AnimationSpeed.fast);
+  });
+
+  test('a bad stored animation speed falls back to normal', () async {
+    final store = await _open({SettingsStore.animationSpeedKey: 'warp'});
+    expect(store.loadSettings().animationSpeed, AnimationSpeed.normal);
   });
 
   test('every theme mode and palette round trips', () async {

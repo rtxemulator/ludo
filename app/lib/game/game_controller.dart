@@ -12,7 +12,9 @@ import 'package:ludo/ui/core/frame_stats.dart';
 import 'package:ludo/ui/core/fx.dart';
 import 'package:ludo/ui/core/fx_scene.dart';
 import 'package:ludo/ui/core/motion_spec.dart';
+import 'package:ludo/ui/core/move_preview.dart';
 import 'package:ludo/ui/core/move_plan.dart';
+import 'package:ludo/ui/core/pacing.dart';
 import 'package:ludo/ui/core/pt.dart';
 import 'package:ludo/seats/seats.dart';
 import 'package:ludo/storage/storage.dart';
@@ -158,12 +160,9 @@ class GameController extends ChangeNotifier {
         (seat) => isAi(seat) && _setup.configOf(seat).aiLevel != AiLevel.easy,
       );
 
-  /// Think time before an AI seat rolls, and before it picks a move (ms).
-  static const double aiRollDelayMs = 700;
-  static const double aiMoveDelayMs = 650;
-
-  /// Reduced motion shortens the think time.
-  static const double aiReducedDelayMs = 250;
+  /// Think time before an AI seat rolls, and before it picks a move: a random
+  /// 400..900 ms (`ThinkDelay`; short and fixed with reduced motion).
+  final ThinkDelay _think = ThinkDelay();
 
   /// When the AI acts next (frame-clock ms); `null` while nothing is due.
   double? _aiDueMs;
@@ -180,6 +179,37 @@ class GameController extends ChangeNotifier {
     _spec = value;
     tray.spec = value;
   }
+
+  /// The one animation queue (`lib/ui/core/pacing.dart`): hops, captures,
+  /// dice and effect tails run one after another, and nothing new (a roll, an
+  /// AI action) starts before it is free.
+  final AnimationQueue _queue = AnimationQueue();
+
+  /// Time skipped by tapping through a long sequence (ms). Added to the
+  /// clock, so every running timeline finishes in the same frame.
+  double _skewMs = 0;
+
+  /// The controller's time: the injected clock plus what was skipped.
+  double _clock() => _now() + _skewMs;
+
+  /// Whether an animation is running or waiting in the queue.
+  bool get animating => _queue.busy(_clock());
+
+  /// Moves a seat with exactly one legal move make by themselves, without a
+  /// tap (setting `autoMoveSingle`; off by default). AI seats and the forced
+  /// spend of a banked roll always go by themselves.
+  bool autoMoveSingle = false;
+
+  /// The move a tap on a token is previewing (destination ring, path trail);
+  /// a second tap on that token, or on its ring, plays it. `null` when none.
+  MovePreview? preview;
+
+  /// When [preview] opened (frame-clock ms).
+  double previewStartMs = 0;
+
+  /// When a turn that had no move passes to the next seat (the roll stays on
+  /// the table until then); `null` when no pass is waiting.
+  double? _passAtMs;
 
   /// Frame clock (ms). Painters listen to this, widgets listen to `this`.
   final ValueNotifier<double> clock = ValueNotifier<double>(0);
@@ -289,7 +319,7 @@ class GameController extends ChangeNotifier {
   bool get needsTicker => phase != GamePhase.gameOver || _celebrating;
 
   bool get _celebrating =>
-      !spec.reducedMotion && _now() - gameOverMs < spec.confettiMs;
+      !spec.reducedMotion && _clock() - gameOverMs < spec.confettiMs;
 
   /// Starts a fresh match (random seed unless [seed] is given).
   void newGame({int? seed}) {
@@ -322,7 +352,7 @@ class GameController extends ChangeNotifier {
     state = replay.state!;
     _resetTable();
     rollerSeat = state.currentSeat;
-    final now = _now();
+    final now = _clock();
     if (banked) {
       // Chips that were on the table are simply there, not flying in.
       tray.reconcile(state.currentSeat, state.bank, now);
@@ -345,6 +375,8 @@ class GameController extends ChangeNotifier {
   /// state, toasts, tray, timers. [state] is already set.
   void _resetTable() {
     _aiDueMs = null;
+    _passAtMs = null;
+    _queue.clear();
     // An answer for the old game must never be played in the new one.
     _ai.cancel();
     if (_hasSearchingAi && !_replay) {
@@ -385,6 +417,8 @@ class GameController extends ChangeNotifier {
   @visibleForTesting
   void debugLoad(GameState loaded) {
     _autosaveOff = true;
+    _queue.clear();
+    _passAtMs = null;
     state = loaded;
     diceSeat = loaded.currentSeat;
     rollerSeat = diceSeat;
@@ -414,6 +448,10 @@ class GameController extends ChangeNotifier {
     if (_replay || phase != GamePhase.awaitingRoll) {
       return;
     }
+    // A person's roll goes ahead at once: what is left of the last sequence
+    // (a hold, a fading effect) is cut short. The dock tap skips a long one
+    // first, and the AI waits for the queue, so this only trims the tail.
+    _cutQueue();
     final result = Engine.roll(state);
     _rollBefore = state;
     _pendingRoll = result;
@@ -428,7 +466,15 @@ class GameController extends ChangeNotifier {
       spec: spec,
     );
     dice = timeline;
-    diceStartMs = _now();
+    diceStartMs = _clock();
+    // The die tumbles, then its face is shown: nothing else starts before.
+    _queue
+      ..add(BeatKind.roll, timeline.settleMs, diceStartMs)
+      ..add(
+        BeatKind.reveal,
+        timeline.durationMs - timeline.settleMs,
+        diceStartMs,
+      );
     _diceImpactFired = false;
     message = null;
     phase = GamePhase.rolling;
@@ -444,10 +490,72 @@ class GameController extends ChangeNotifier {
     if (_replay || phase != GamePhase.rolling) {
       return;
     }
+    _skipOnce();
+  }
+
+  /// Whether a tap now should skip the running sequence rather than act:
+  /// a roll or a move is playing, or the queue has more than
+  /// `Pacing.skipMinRemainingMs` left. In the last stretch a tap acts.
+  bool get _wantsSkip =>
+      phase == GamePhase.rolling ||
+      phase == GamePhase.moving ||
+      _queue.remainingMs(_clock()) > Pacing.skipMinRemainingMs;
+
+  /// Tap-to-skip: ends the running sequence (the roll, a hop and its
+  /// effects, the "No move" hold) at once. When that starts the next beat
+  /// (a roll's result may start a move) it is skipped too, a few times over,
+  /// until the table waits for a person or a think time. A sequence that has
+  /// less than `Pacing.skipMinRemainingMs` left is left to finish. Returns
+  /// whether anything was skipped.
+  bool skip() {
+    if (_replay) {
+      return false;
+    }
+    var skipped = false;
+    for (var i = 0; i < 8; i++) {
+      final now = _clock();
+      if (_queue.remainingMs(now) <= Pacing.skipMinRemainingMs ||
+          !_skipOnce()) {
+        break;
+      }
+      skipped = true;
+    }
+    return skipped;
+  }
+
+  /// Ends what is left of the queue by moving the clock to its end, then
+  /// passes a turn that was waiting for its hold to finish.
+  void _cutQueue() {
+    final jump = _queue.skip(_clock());
+    if (jump > 0) {
+      _skewMs += jump;
+    }
+    if (_passAtMs != null) {
+      _passAtMs = null;
+      _activate(state.currentSeat);
+    }
+  }
+
+  /// Plays a move a person chose: it starts at once, cutting short whatever
+  /// is left of the die's reveal or a fading effect (a tap during the last
+  /// 250 ms of a sequence is not lost).
+  void _playTapped(Move move) {
+    _cutQueue();
+    _startMove(move);
+  }
+
+  /// Moves the clock to the end of everything queued and lets the controller
+  /// react. Returns whether time moved.
+  bool _skipOnce() {
+    final jump = _queue.skip(_clock());
+    if (jump <= 0) {
+      return false;
+    }
     // The skipped bounces are not felt either; only the settle click plays.
     _diceImpactFired = true;
-    diceStartMs = _now() - dice!.settleMs;
+    _skewMs += jump;
     tick();
+    return true;
   }
 
   /// A tap on seat [seat]'s dock: rolls (or quick-rolls) when it is that
@@ -457,6 +565,11 @@ class GameController extends ChangeNotifier {
       return;
     }
     if (seat == activeSeat) {
+      if (_wantsSkip) {
+        // A tap on the dock while something plays: skip through it.
+        skip();
+        return;
+      }
       if (phase == GamePhase.awaitingRoll) {
         if (aiTurn) {
           // The computer rolls by itself.
@@ -466,14 +579,10 @@ class GameController extends ChangeNotifier {
         }
         return;
       }
-      if (phase == GamePhase.rolling) {
-        quickRoll();
-        return;
-      }
       if (banked && phase == GamePhase.awaitingMove && !aiTurn) {
         // The live die is the roll button, but the bank has to be spent
         // first: it shakes, and so does the tray.
-        final now = _now();
+        final now = _clock();
         bankShakeMs = now;
         tray.shake(state.currentSeat, now);
         feedback.play(HapticEvent.illegal);
@@ -485,7 +594,7 @@ class GameController extends ChangeNotifier {
 
   /// Flashes [seat]'s dock (a tap that did nothing).
   void pulseDock(int seat) {
-    dockPulseMs[seat] = _now();
+    dockPulseMs[seat] = _clock();
   }
 
   /// Makes [seat] the one on turn, starting the dock handoff.
@@ -495,7 +604,7 @@ class GameController extends ChangeNotifier {
     }
     prevActiveSeat = diceSeat;
     diceSeat = seat;
-    activeSinceMs = _now();
+    activeSinceMs = _clock();
   }
 
   /// Tap reach (cells, as a radius) at the old token size; the board view
@@ -511,7 +620,15 @@ class GameController extends ChangeNotifier {
   /// it (with a faint red ring and a double tick).
   bool tapAt(Pt grid, {double reach = _baseReach}) {
     _reach = reach < _baseReach ? _baseReach : reach;
-    if (_replay || aiTurn) {
+    if (_replay) {
+      return false;
+    }
+    if (_wantsSkip) {
+      // A tap while something plays skips through it (a long sequence only).
+      skip();
+      return false;
+    }
+    if (aiTurn) {
       return false;
     }
     if (phase == GamePhase.awaitingRoll) {
@@ -525,7 +642,7 @@ class GameController extends ChangeNotifier {
       final picked = _pickVariant(grid);
       _clearVariants();
       if (picked != null) {
-        _startMove(picked);
+        _playTapped(picked);
         return true;
       }
       notifyListeners();
@@ -534,7 +651,12 @@ class GameController extends ChangeNotifier {
       return _tapBanked(grid);
     }
     final token = _nearestToken(legal, grid);
+    if (_tapConfirmsPreview(grid, token)) {
+      _playTapped(preview!.move);
+      return true;
+    }
     if (token == null) {
+      _dropPreview();
       _illegalTap(grid);
       return false;
     }
@@ -543,11 +665,44 @@ class GameController extends ChangeNotifier {
         if (m.owner == token.$1 && m.moves(token.$2)) m,
     ];
     if (mine.length == 1) {
-      _startMove(mine.single);
-      return true;
+      // First tap: show where it would go. A second tap plays it.
+      _showPreview(mine.single);
+      return false;
     }
+    _dropPreview();
     _promptVariants(mine);
     return false;
+  }
+
+  /// Opens the preview of [move]: ring on its landing square, trail over the
+  /// squares it crosses, a distinct ring when it captures.
+  void _showPreview(Move move) {
+    preview = MovePreview.of(state, move, geometry: _geo);
+    previewStartMs = _clock();
+    feedback.play(HapticEvent.select);
+    notifyListeners();
+  }
+
+  void _dropPreview() {
+    if (preview != null) {
+      preview = null;
+      notifyListeners();
+    }
+  }
+
+  /// Whether a tap at [grid] (on [token], the nearest movable one, if any)
+  /// plays the previewed move: a tap on the previewed token again, or on its
+  /// destination ring when no other movable token is under the finger.
+  bool _tapConfirmsPreview(Pt grid, (int, int)? token) {
+    final p = preview;
+    if (p == null) {
+      return false;
+    }
+    if (token != null) {
+      return p.isFor(token.$1, token.$2);
+    }
+    final reach = _reach > 0.9 ? _reach : 0.9;
+    return p.destination.distanceTo(grid) <= reach;
   }
 
   /// The token (owner, index) of [moves] nearest to [grid], within reach of a
@@ -588,9 +743,12 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops the destination choice and the move preview (both are answers to
+  /// the same question: which move?).
   void _clearVariants() {
     variants = const [];
     variantPoints = const [];
+    preview = null;
   }
 
   Move? _pickVariant(Pt grid) {
@@ -615,25 +773,32 @@ class GameController extends ChangeNotifier {
       return false;
     }
     final token = _nearestToken(c.legal, grid);
+    if (_tapConfirmsPreview(grid, token)) {
+      _playTapped(preview!.move);
+      return true;
+    }
     if (token == null) {
+      _dropPreview();
       _illegalTap(grid);
       return false;
     }
     final result = c.tapToken(token.$1, token.$2);
     switch (result.kind) {
       case TokenTapKind.variants:
+        _dropPreview();
         _promptVariants(result.moves!);
         return false;
       case TokenTapKind.spend:
-        _startMove(result.move!);
-        return true;
+        _showPreview(result.move!);
+        return false;
       case TokenTapKind.select:
+        preview = null;
         _syncSelection();
         feedback.play(HapticEvent.select);
         notifyListeners();
         return false;
       case TokenTapKind.prompt:
-        tray.prompt(state.currentSeat, _now());
+        tray.prompt(state.currentSeat, _clock());
         feedback.play(HapticEvent.noMove);
         return false;
       case TokenTapKind.none:
@@ -660,7 +825,7 @@ class GameController extends ChangeNotifier {
       feedback.play(HapticEvent.select);
       notifyListeners();
     } else {
-      tray.shake(seat, _now());
+      tray.shake(seat, _clock());
       feedback.play(HapticEvent.illegal);
     }
   }
@@ -706,12 +871,12 @@ class GameController extends ChangeNotifier {
 
   /// Tells the tray which chip is selected.
   void _syncSelection() {
-    tray.select(state.currentSeat, choice?.selected, _now());
+    tray.select(state.currentSeat, choice?.selected, _clock());
   }
 
   /// Gives each seat's tray the width its layout slot has (chips per row).
   void syncTrayCapacity(List<double> chips) {
-    final now = _now();
+    final now = _clock();
     for (var seat = 0; seat < chips.length && seat < seatCount; seat++) {
       tray.setCapacity(seat, chips[seat], now);
     }
@@ -737,7 +902,7 @@ class GameController extends ChangeNotifier {
       return;
     }
     fx.addNudge(
-      FxNudge(seat: seat, index: index, startMs: _now()),
+      FxNudge(seat: seat, index: index, startMs: _clock()),
       resting[seat][index],
       spec,
     );
@@ -746,11 +911,18 @@ class GameController extends ChangeNotifier {
 
   /// Advances time-based transitions; called every frame by the screen.
   void tick() {
-    final now = _now();
+    final now = _clock();
     PaintProbe.nextFrame();
     clock.value = now;
     fx.prune(now, spec);
     tray.prune(now, spec);
+    final pass = _passAtMs;
+    if (pass != null && now >= pass) {
+      // The roll that had no move has been shown long enough: pass the turn.
+      _passAtMs = null;
+      _activate(state.currentSeat);
+      notifyListeners();
+    }
     if (phase == GamePhase.rolling) {
       final t = now - diceStartMs;
       final impacts = dice!.impactsMs;
@@ -824,11 +996,10 @@ class GameController extends ChangeNotifier {
       // A forced spend of the bank goes by itself.
       return;
     }
-    final reduced = spec.reducedMotion;
     if (phase == GamePhase.awaitingRoll) {
-      final due =
-          _aiDueMs ??= now + (reduced ? aiReducedDelayMs : aiRollDelayMs);
-      if (now >= due) {
+      // It thinks once the table is quiet, never while something still plays.
+      final due = _aiDueMs ??= _queue.freeAtMs(now) + _think.next(spec);
+      if (now >= due && !_queue.busy(now)) {
         _aiDueMs = null;
         roll();
       }
@@ -840,11 +1011,14 @@ class GameController extends ChangeNotifier {
     if (!_ai.busy) {
       _ai.begin(
         nowMs: now,
-        thinkMs: reduced ? aiReducedDelayMs : aiMoveDelayMs,
+        thinkMs: _think.next(spec),
         state: state,
         legal: legal,
         level: _setup.configOf(state.currentSeat).aiLevel,
       );
+    }
+    if (_queue.busy(now)) {
+      return;
     }
     final move = _ai.poll(now, state);
     if (move != null) {
@@ -872,13 +1046,20 @@ class GameController extends ChangeNotifier {
     }
     if (result.outcome == RollOutcome.awaitingMove) {
       legal = Engine.legalMoves(state);
-      if (legal.length == 1) {
-        _startMove(legal.first);
-        return;
-      }
       phase = GamePhase.awaitingMove;
+      if (legal.length == 1 && (autoMoveSingle || isAi(state.currentSeat))) {
+        // Nothing to choose: it goes by itself once the die has shown its
+        // face (the reveal beat), never over it.
+        final at = _queue.freeAtMs(_clock());
+        if (at <= _clock()) {
+          _startMove(legal.first);
+          return;
+        }
+        _autoMove = legal.first;
+        _autoMoveAtMs = at;
+      }
     } else {
-      final now = _now();
+      final now = _clock();
       message = result.outcome == RollOutcome.tripleSixForfeit
           ? 'Three sixes'
           : 'No move';
@@ -886,16 +1067,30 @@ class GameController extends ChangeNotifier {
       noMoveSeat = dimSeat;
       noMoveMs = now;
       feedback.play(HapticEvent.noMove);
-      _activate(state.currentSeat);
+      _holdThenPass(now);
       phase = GamePhase.awaitingRoll;
     }
     notifyListeners();
   }
 
+  /// A turn with nothing to play: the roll stays on the table for about
+  /// 600 ms after the die settles (the reveal beat is part of that), then the
+  /// turn passes. The queue stays busy meanwhile, so no roll can start.
+  void _holdThenPass(double now) {
+    final extra = Pacing.noMoveMs(spec) - _queue.remainingMs(now);
+    _queue.add(BeatKind.hold, extra, now);
+    final at = _queue.freeAtMs(now);
+    if (at <= now) {
+      _activate(state.currentSeat);
+    } else {
+      _passAtMs = at;
+    }
+  }
+
   /// Banked rolls: applies the outcome of one roll (the die only joined the
   /// bank, or the sequence ended, or it was wiped or reverted).
   void _finishBankedRoll(GameState before, RollResult result) {
-    final now = _now();
+    final now = _clock();
     final seat = rollerSeat;
     final dimSeat = before.controlledSeat;
     state = result.state;
@@ -922,7 +1117,7 @@ class GameController extends ChangeNotifier {
         noMoveSeat = dimSeat;
         noMoveMs = now;
         feedback.play(HapticEvent.noMove);
-        _activate(state.currentSeat);
+        _holdThenPass(now);
         phase = GamePhase.awaitingRoll;
       case RollOutcome.bankDeadEnd:
         // The last die joins the bank for a moment, then the bank goes and
@@ -949,6 +1144,7 @@ class GameController extends ChangeNotifier {
           fx.addAll(anim.effects);
           revert = anim;
           revertStartMs = now + delay;
+          _queue.add(BeatKind.move, delay + anim.totalMs, now);
           phase = GamePhase.moving;
         }
       case RollOutcome.noLegalMoves:
@@ -971,7 +1167,7 @@ class GameController extends ChangeNotifier {
   /// the selection (automatic when only one value can be played) and
   /// schedules a forced spend.
   void _enterMoving() {
-    final now = _now();
+    final now = _clock();
     final seat = state.currentSeat;
     tray.reconcile(seat, state.bank, now);
     final c = BankChoice.of(state);
@@ -979,7 +1175,9 @@ class GameController extends ChangeNotifier {
     legal = c.legal;
     tray.select(seat, c.selected, now);
     _autoMove = c.forced;
-    _autoMoveAtMs = now + (spec.reducedMotion ? 0 : spec.tray.autoSpendMs);
+    final spendAt = now + (spec.reducedMotion ? 0 : spec.tray.autoSpendMs);
+    final free = _queue.freeAtMs(now);
+    _autoMoveAtMs = spendAt > free ? spendAt : free;
     phase = GamePhase.awaitingMove;
   }
 
@@ -991,7 +1189,7 @@ class GameController extends ChangeNotifier {
     if (entry != null) {
       _autosave(entry, after);
     }
-    final start = _now();
+    final start = _clock();
     _autoMove = null;
     _clearVariants();
     if (banked) {
@@ -1018,6 +1216,15 @@ class GameController extends ChangeNotifier {
         : _geo.restingScales(after)[move.owner][move.tokenIndex];
     plan = newPlan;
     fx.addAll(newPlan.effects);
+    // The hop (and a capture or finish with it), then whatever is left of
+    // its effects: one beat after the other, so the next roll never plays
+    // over them.
+    _queue.add(BeatKind.move, newPlan.totalMs, start);
+    _queue.add(
+      BeatKind.tail,
+      newPlan.effects.endMs - (start + newPlan.totalMs),
+      start,
+    );
     _after = after;
     planStartMs = start;
     _impactFired = false;
@@ -1060,7 +1267,7 @@ class GameController extends ChangeNotifier {
     }
     _saveNoticeShown = true;
     final seat = state.currentSeat;
-    toasts[seat] = DockToast('Not saved', _now());
+    toasts[seat] = DockToast('Not saved', _clock());
     notifyListeners();
   }
 
@@ -1080,7 +1287,7 @@ class GameController extends ChangeNotifier {
     phase = state.isOver ? GamePhase.gameOver : GamePhase.awaitingRoll;
     if (phase == GamePhase.gameOver) {
       feedback.play(HapticEvent.win);
-      gameOverMs = _now();
+      gameOverMs = _clock();
       _tickerStopNotified = false;
       confetti = ConfettiBurst(
         origin: const Pt(0, 0),
@@ -1110,7 +1317,7 @@ class GameController extends ChangeNotifier {
       seatDice[entry.key] = _ghostDie(entry.key, entry.value);
     }
     if (banked && shown.bank.isNotEmpty) {
-      tray.reconcile(shown.currentSeat, shown.bank, _now());
+      tray.reconcile(shown.currentSeat, shown.bank, _clock());
     }
     if (shown.isOver) {
       phase = GamePhase.gameOver;
@@ -1133,7 +1340,7 @@ class GameController extends ChangeNotifier {
   }) {
     assert(_replay, 'replayPlay is for replay controllers');
     replaySettle();
-    final now = _now();
+    final now = _clock();
     if (reverted) {
       toasts[state.currentSeat] = DockToast('Turn undone', now);
     }

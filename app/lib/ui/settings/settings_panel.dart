@@ -51,37 +51,6 @@ class SettingsPanel extends StatelessWidget {
               ),
             ),
             ListTile(
-              title: const Text('Animation speed'),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SegmentedButton<AnimationSpeed>(
-                  key: const ValueKey('animation-speed'),
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                      value: AnimationSpeed.normal,
-                      label: Text('Normal'),
-                    ),
-                    ButtonSegment(
-                      value: AnimationSpeed.fast,
-                      label: Text('Fast'),
-                    ),
-                  ],
-                  selected: {s.animationSpeed},
-                  onSelectionChanged: (v) => s.animationSpeed = v.first,
-                ),
-              ),
-            ),
-            SwitchListTile(
-              key: const ValueKey('auto-move-single'),
-              title: const Text('Auto-move a single option'),
-              subtitle: const Text(
-                'Plays the only legal move without a tap',
-              ),
-              value: s.autoMoveSingle,
-              onChanged: (v) => s.autoMoveSingle = v,
-            ),
-            ListTile(
               title: const Text('UI orientation'),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -184,6 +153,38 @@ class SettingsPanel extends StatelessWidget {
               subtitle: const Text('fps, dropped frames, paint time'),
               value: s.frameOverlay,
               onChanged: (v) => s.frameOverlay = v,
+            ),
+            const _SectionHeader('Play'),
+            ListTile(
+              title: const Text('Animation speed'),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: SegmentedButton<AnimationSpeed>(
+                  key: const ValueKey('animation-speed'),
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: AnimationSpeed.normal,
+                      label: Text('Normal'),
+                    ),
+                    ButtonSegment(
+                      value: AnimationSpeed.fast,
+                      label: Text('Fast'),
+                    ),
+                  ],
+                  selected: {s.animationSpeed},
+                  onSelectionChanged: (v) => s.animationSpeed = v.first,
+                ),
+              ),
+            ),
+            SwitchListTile(
+              key: const ValueKey('auto-move-single'),
+              title: const Text('Auto-move a single option'),
+              subtitle: const Text(
+                'Plays the only legal move without a tap',
+              ),
+              value: s.autoMoveSingle,
+              onChanged: (v) => s.autoMoveSingle = v,
             ),
           ],
         );

@@ -24,6 +24,26 @@ Future<void> _flushSaves(WidgetTester tester) async {
 
 void main() {
   group('SettingsScreen', () {
+    testWidgets('the Play rows change the model', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final settings = GameSettings();
+      await tester.pumpWidget(
+        MaterialApp(home: SettingsScreen(settings: settings)),
+      );
+      expect(find.text('Animation speed'), findsOneWidget);
+      expect(find.text('Auto-move a single option'), findsOneWidget);
+      expect(settings.animationSpeed, AnimationSpeed.normal);
+      expect(settings.autoMoveSingle, isFalse);
+      await tester.tap(find.text('Fast'));
+      await tester.pump();
+      expect(settings.animationSpeed, AnimationSpeed.fast);
+      await tester.tap(find.byKey(const ValueKey('auto-move-single')));
+      await tester.pump();
+      expect(settings.autoMoveSingle, isTrue);
+    });
+
     testWidgets('shows the settings rows under an app bar', (tester) async {
       // Tall enough for every row to be built (the list is lazy).
       tester.view.physicalSize = const Size(800, 1600);
@@ -38,8 +58,6 @@ void main() {
       for (final row in [
         'Haptics',
         'Reduce motion',
-        'Animation speed',
-        'Auto-move a single option',
         'UI orientation',
         'Auto-rotate menu to active seat',
         'Sound effects',

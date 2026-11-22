@@ -181,6 +181,9 @@ void main() {
 
       test('spend the 6, then the forced low die, then the turn passes', () {
         final low = g.state.bank.last;
+        // The first tap previews the spend, the second plays it.
+        expect(g.tapAt(g.resting[0][0]), isFalse);
+        expect(g.preview, isNotNull);
         expect(g.tapAt(g.resting[0][0]), isTrue);
         expect(g.phase, GamePhase.moving);
         expect(g.choice, isNull);
@@ -225,11 +228,14 @@ void main() {
       expect(g.message, 'Three sixes');
       expect(g.toasts[0]!.text, 'Three sixes');
       expect(g.phase, GamePhase.awaitingRoll);
-      expect(g.activeSeat, 1);
       expect(g.state.bank, isEmpty);
       expect(g.tray.valuesOf(0), isEmpty);
       final bursting = g.tray.chips.where((c) => c.exit == ChipExit.wipe);
       expect(bursting, hasLength(2));
+      // The roll stays on the table for a moment, then the turn passes.
+      expect(g.activeSeat, 0);
+      rig.step(700);
+      expect(g.activeSeat, 1);
       rig.step(3000);
       expect(g.tray.isEmpty, isTrue);
     });

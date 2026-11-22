@@ -95,7 +95,8 @@ void main() {
       }
       if (game.activeSeat != before && before != null) {
         expect(game.prevActiveSeat, before);
-        expect(game.activeSinceMs, t);
+        // The turn passes after the "No move" hold, never before this time.
+        expect(game.activeSinceMs, greaterThanOrEqualTo(t));
         return;
       }
     }

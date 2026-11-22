@@ -523,21 +523,20 @@ class GameController extends ChangeNotifier {
     return skipped;
   }
 
-  /// Ends what is left of the queue by moving the clock to its end, then
-  /// passes a turn that was waiting for its hold to finish.
+  /// Ends what is left of the queue (at most the last 250 ms of a sequence
+  /// when a person acts) without moving the clock, then passes a turn that
+  /// was waiting for its hold to finish. A fading effect may play on for
+  /// that quarter second; nothing is cut off abruptly.
   void _cutQueue() {
-    final jump = _queue.skip(_clock());
-    if (jump > 0) {
-      _skewMs += jump;
-    }
+    _queue.clear();
     if (_passAtMs != null) {
       _passAtMs = null;
       _activate(state.currentSeat);
     }
   }
 
-  /// Plays a move a person chose: it starts at once, cutting short whatever
-  /// is left of the die's reveal or a fading effect (a tap during the last
+  /// Plays a move a person chose: it starts at once, ahead of whatever is
+  /// left of the die's reveal or a fading effect (a tap during the last
   /// 250 ms of a sequence is not lost).
   void _playTapped(Move move) {
     _cutQueue();

@@ -22,6 +22,7 @@ import 'package:ludo_app/ui/setup/seat_map.dart';
 import 'package:ludo_app/ui/setup/setup_screen.dart';
 import 'package:ludo_app/ui/table/felt_painter.dart';
 import 'package:ludo_app/ui/table/overlay_painter.dart';
+import 'package:ludo_app/ui/table/seat_plates_painter.dart';
 import 'package:ludo_app/ui/theme/app_theme.dart';
 import 'package:ludo_app/ui/theme/palette.dart';
 import 'package:ludo_app/ui/theme/token_shaders.dart';
@@ -70,6 +71,7 @@ List<LudoPalette> _tablePalettes(WidgetTester tester) => [
       for (final p in _painters<TokenLayerPainter>(tester)) p.palette,
       for (final p in _painters<DockPainter>(tester)) p.palette,
       for (final p in _painters<OverlayPainter>(tester)) p.palette,
+      for (final p in _painters<SeatPlatesPainter>(tester)) p.palette,
     ];
 
 Widget _app(Widget home, {ThemeMode mode = ThemeMode.light}) => MaterialApp(
@@ -424,14 +426,6 @@ void main() {
         identical(
             _painters<TokenLayerPainter>(tester).first.shaders, shadersBefore),
         isFalse,
-      );
-      // The turn light uses the same new shaders as the tokens.
-      expect(
-        identical(
-          _painters<YardGlowPainter>(tester).first.shaders,
-          _painters<TokenLayerPainter>(tester).first.shaders,
-        ),
-        isTrue,
       );
       expect(
         tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,

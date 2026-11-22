@@ -47,11 +47,7 @@ class BoardView extends StatelessWidget {
               // layer repainting never re-rasterises another.
               RepaintBoundary(
                 child: CustomPaint(
-                  painter: YardGlowPainter(
-                    game: game,
-                    palette: palette,
-                    shaders: shaders,
-                  ),
+                  painter: YardGlowPainter(game: game, palette: palette),
                 ),
               ),
               RepaintBoundary(

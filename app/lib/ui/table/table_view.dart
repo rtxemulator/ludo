@@ -13,6 +13,7 @@ import '../theme/palette.dart';
 import '../theme/token_shaders.dart';
 import 'felt_painter.dart';
 import 'overlay_painter.dart';
+import 'seat_plates_painter.dart';
 
 /// Converts a pure-Dart [Box] to a Flutter [Rect].
 Rect boxRect(Box b) => Rect.fromLTWH(b.left, b.top, b.width, b.height);
@@ -101,6 +102,21 @@ class TableView extends StatelessWidget {
                       layout: layout,
                       palette: palette,
                       orientation: settings.orientation,
+                    ),
+                  ),
+                  // Name plates and "n/4 home" chips in the empty margins.
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: SeatPlatesPainter(
+                            game: game,
+                            layout: layout,
+                            palette: palette,
+                            orientation: settings.orientation,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   Positioned.fill(

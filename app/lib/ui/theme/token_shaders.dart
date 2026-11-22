@@ -44,9 +44,6 @@ class TokenShaders {
               ],
             ).createShader(_unit),
         ],
-        yardGlow = [
-          for (var s = 0; s < 4; s++) _yardGlow(palette.seatLight(s), s),
-        ],
         shadowCore = const RadialGradient(
           colors: [Color(0x78000000), Color(0x5A000000), Color(0x00000000)],
           stops: [0.0, 0.62, 1.0],
@@ -65,16 +62,6 @@ class TokenShaders {
     return Rect.fromPoints(Offset(a.x, a.y), Offset(b.x, b.y));
   }
 
-  /// Turn light of a yard at full strength, defined in grid cells (the board
-  /// canvas is scaled to cells, so the shader is reused at every size). The
-  /// painter scales its alpha with a `dstIn` filter instead of building a new
-  /// gradient every frame.
-  static Shader _yardGlow(Color glow, int seat) => RadialGradient(
-        radius: 0.75,
-        colors: [glow.withAlpha(0), glow.withAlpha(190)],
-        stops: const [0.5, 1.0],
-      ).createShader(yardRect(seat));
-
   /// Pawn body per seat: radial, lighter at the centre (symmetric).
   final List<Shader> body;
 
@@ -83,9 +70,6 @@ class TokenShaders {
 
   /// Soft legal-move glow per seat (fixed alpha; only its size pulses).
   final List<Shader> glow;
-
-  /// Turn light per yard (grid-cell coordinates, alpha 0..190).
-  final List<Shader> yardGlow;
 
   /// Tight, darker shadow right under the pawn.
   final Shader shadowCore;

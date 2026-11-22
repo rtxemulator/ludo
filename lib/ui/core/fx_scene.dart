@@ -71,6 +71,29 @@ class PlanEffects {
   final List<FxRing> rings;
   final List<FxSparks> sparks;
   final List<FxGlow> glows;
+
+  /// When the last of these effects ends (absolute ms); `0` when there are
+  /// none. The pacing queue waits for it so effects never run into the next
+  /// roll.
+  double get endMs {
+    var end = 0.0;
+    for (final r in rings) {
+      if (r.ring.endMs > end) {
+        end = r.ring.endMs;
+      }
+    }
+    for (final s in sparks) {
+      if (s.burst.endMs > end) {
+        end = s.burst.endMs;
+      }
+    }
+    for (final g in glows) {
+      if (g.endMs > end) {
+        end = g.endMs;
+      }
+    }
+    return end;
+  }
 }
 
 /// Everything alive now. The controller feeds it and prunes it every frame.

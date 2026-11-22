@@ -4,6 +4,7 @@
 class MotionSpec {
   const MotionSpec({
     this.reducedMotion = false,
+    this.speed = 1,
     this.reducedFadeMs = 120,
     this.hopStepMs = 130,
     this.hopArc = 0.35,
@@ -94,6 +95,10 @@ class MotionSpec {
   static const MotionSpec reduced = MotionSpec(reducedMotion: true);
 
   final bool reducedMotion;
+
+  /// How many times faster than [standard] this spec plays (`1` normal).
+  /// The AI think time divides by it too.
+  final double speed;
   final double reducedFadeMs;
 
   final double hopStepMs;
@@ -229,6 +234,103 @@ class MotionSpec {
 
   /// Numbers of the banked-roll tray (docs/ludo-ui-ux.md section 10).
   final TraySpec tray;
+
+  /// A copy that plays [factor] times as fast: every duration (hops, rings,
+  /// the dice roll, the roll tray) is divided by [factor]. Distances, sizes
+  /// and the periods of the idle breathing (legal-move pulse, idle die bob)
+  /// stay as they are, so a faster table does not make the waiting state
+  /// jittery. Reduced motion keeps its own near-instant timings.
+  MotionSpec scaled(double factor) {
+    assert(factor > 0);
+    if (factor == 1) {
+      return this;
+    }
+    return MotionSpec(
+      reducedMotion: reducedMotion,
+      speed: speed * factor,
+      reducedFadeMs: reducedFadeMs,
+      hopStepMs: hopStepMs / factor,
+      hopArc: hopArc,
+      yardExitMs: yardExitMs / factor,
+      yardExitArc: yardExitArc,
+      landSquashMs: landSquashMs / factor,
+      pressScale: pressScale,
+      liftScaleGain: liftScaleGain,
+      captureShakeMs: captureShakeMs / factor,
+      shakeAmplitude: shakeAmplitude,
+      shakeCycles: shakeCycles,
+      shakeDecay: shakeDecay,
+      captureReturnMs: captureReturnMs / factor,
+      captureReturnArc: captureReturnArc,
+      finishScaleMs: finishScaleMs / factor,
+      finishScale: finishScale,
+      ringMs: ringMs / factor,
+      ringStartRadius: ringStartRadius,
+      ringEndRadius: ringEndRadius,
+      ringOpacity: ringOpacity,
+      pulsePeriodMs: pulsePeriodMs,
+      pulseMinRadius: pulseMinRadius,
+      pulseRadiusGain: pulseRadiusGain,
+      pulseMinOpacity: pulseMinOpacity,
+      pulseOpacityGain: pulseOpacityGain,
+      dustMs: dustMs / factor,
+      dustStartRadius: dustStartRadius,
+      dustEndRadius: dustEndRadius,
+      dustOpacity: dustOpacity,
+      shockwaveMs: shockwaveMs / factor,
+      shockwaveStartRadius: shockwaveStartRadius,
+      shockwaveEndRadius: shockwaveEndRadius,
+      shockwaveOpacity: shockwaveOpacity,
+      sparkCount: sparkCount,
+      sparkDistance: sparkDistance,
+      sparkMs: sparkMs / factor,
+      sparkSize: sparkSize,
+      pocketGlowMs: pocketGlowMs / factor,
+      coinFlipTurns: coinFlipTurns,
+      confettiCount: confettiCount,
+      maxParticles: maxParticles,
+      movableLift: movableLift,
+      confettiMs: confettiMs / factor,
+      dockHandoffMs: dockHandoffMs / factor,
+      ghostOpacity: ghostOpacity,
+      ghostScale: ghostScale,
+      ghostDesaturate: ghostDesaturate,
+      idleBobPeriodMs: idleBobPeriodMs,
+      idleBobScale: idleBobScale,
+      idleHaloOpacity: idleHaloOpacity,
+      dockPulseMs: dockPulseMs / factor,
+      yardRingMs: yardRingMs / factor,
+      yardRingStartRadius: yardRingStartRadius,
+      yardRingEndRadius: yardRingEndRadius,
+      yardRingOpacity: yardRingOpacity,
+      rippleMs: rippleMs / factor,
+      rippleStartRadius: rippleStartRadius,
+      rippleEndRadius: rippleEndRadius,
+      rippleOpacity: rippleOpacity,
+      nudgeMs: nudgeMs / factor,
+      nudgeAmplitude: nudgeAmplitude,
+      nudgeCycles: nudgeCycles,
+      nudgeDecay: nudgeDecay,
+      nudgeRingMs: nudgeRingMs / factor,
+      nudgeRingStartRadius: nudgeRingStartRadius,
+      nudgeRingEndRadius: nudgeRingEndRadius,
+      nudgeRingOpacity: nudgeRingOpacity,
+      noMoveDimMs: noMoveDimMs / factor,
+      noMoveDimAmount: noMoveDimAmount,
+      dieShakeMs: dieShakeMs / factor,
+      dieShakeAmplitude: dieShakeAmplitude,
+      dieShakeCycles: dieShakeCycles,
+      dieShakeDecay: dieShakeDecay,
+      toastMs: toastMs / factor,
+      toastFadeMs: toastFadeMs / factor,
+      rankBadgeMs: rankBadgeMs / factor,
+      revertMs: revertMs / factor,
+      revertArc: revertArc,
+      revertStaggerMs: revertStaggerMs / factor,
+      dice3d: dice3d.scaled(factor),
+      tray: tray.scaled(factor),
+    );
+  }
 }
 
 /// Timing and size of the banked-roll tray: the die chips beside a dock.
@@ -320,6 +422,40 @@ class TraySpec {
 
   /// Opacity of a chip that cannot be spent right now.
   final double dimOpacity;
+
+  /// A copy whose durations are divided by [factor].
+  TraySpec scaled(double factor) {
+    return TraySpec(
+      popMs: popMs / factor,
+      popFromScale: popFromScale,
+      slideMs: slideMs / factor,
+      selectMs: selectMs / factor,
+      selectedScale: selectedScale,
+      spendMs: spendMs / factor,
+      spendEndScale: spendEndScale,
+      spendDissolveFrom: spendDissolveFrom,
+      spendArc: spendArc,
+      wipeMs: wipeMs / factor,
+      wipeStaggerMs: wipeStaggerMs / factor,
+      wipeShake: wipeShake,
+      wipeEndScale: wipeEndScale,
+      revertMs: revertMs / factor,
+      revertStaggerMs: revertStaggerMs / factor,
+      revertEndScale: revertEndScale,
+      promptMs: promptMs / factor,
+      promptScale: promptScale,
+      shakeMs: shakeMs / factor,
+      shakeAmplitude: shakeAmplitude,
+      shakeCycles: shakeCycles,
+      shakeDecay: shakeDecay,
+      autoSpendMs: autoSpendMs / factor,
+      chipGap: chipGap,
+      fanTilt: fanTilt,
+      fanMaxTilt: fanMaxTilt,
+      fanSag: fanSag,
+      dimOpacity: dimOpacity,
+    );
+  }
 }
 
 /// Timing and size of the 3D dice roll (docs/ludo-ui-ux.md section 4.2).
@@ -396,4 +532,32 @@ class Dice3dSpec {
 
   /// Moments the die hits the table.
   List<double> get impactsMs => [flightEndMs, bounce2EndMs, bounce3EndMs];
+
+  /// A copy whose durations are divided by [factor].
+  Dice3dSpec scaled(double factor) {
+    return Dice3dSpec(
+      popInMs: popInMs / factor,
+      flightEndMs: flightEndMs / factor,
+      bounce2EndMs: bounce2EndMs / factor,
+      bounce3EndMs: bounce3EndMs / factor,
+      settleEndMs: settleEndMs / factor,
+      revealEndMs: revealEndMs / factor,
+      popFromScale: popFromScale,
+      flightApex: flightApex,
+      bounce2Apex: bounce2Apex,
+      bounce3Apex: bounce3Apex,
+      liftScalePerCell: liftScalePerCell,
+      pressScale: pressScale,
+      pressMs: pressMs / factor,
+      wobbleDegrees: wobbleDegrees,
+      wobbleCycles: wobbleCycles,
+      wobbleDecay: wobbleDecay,
+      tumbleTurnsA: tumbleTurnsA,
+      tumbleTurnsB: tumbleTurnsB,
+      landingJitter: landingJitter,
+      handDistance: handDistance,
+      maxYawDegrees: maxYawDegrees,
+      dieCells: dieCells,
+    );
+  }
 }

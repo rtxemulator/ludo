@@ -149,16 +149,32 @@ class RingFx {
 
 /// One spark of a [SparkBurst].
 class Spark {
-  const Spark({required this.pos, required this.opacity, required this.size});
+  const Spark({
+    required this.pos,
+    required this.opacity,
+    required this.size,
+    this.angle = 0,
+    this.tail = 0,
+  });
 
   final Pt pos;
   final double opacity;
 
   /// Radius in cells.
   final double size;
+
+  /// Flight direction in radians (away from the burst centre).
+  final double angle;
+
+  /// Length (cells) of the streak behind the spark, along [angle]; `0` for a
+  /// plain dot. It shrinks to nothing as the spark fades.
+  final double tail;
 }
 
-/// Radial sparks flying out of the pocket when a token reaches home.
+/// Radial sparks flying out of the pocket when a token reaches home:
+/// [MotionSpec.sparkCount] of them, evenly spread in angle, each with its
+/// own reach and size; every other one is a streak (it leaves a tail), the
+/// rest are dots. Deterministic for a given seed.
 class SparkBurst {
   SparkBurst({
     required this.center,
@@ -170,7 +186,8 @@ class SparkBurst {
     final base = rnd.range(0, 2 * math.pi / spec.sparkCount);
     for (var i = 0; i < spec.sparkCount; i++) {
       _angles.add(base + i * 2 * math.pi / spec.sparkCount);
-      _reach.add(rnd.range(0.8, 1.0));
+      _reach.add(rnd.range(0.55, 1.0));
+      _grow.add(rnd.range(0.75, 1.35));
     }
   }
 
@@ -180,6 +197,7 @@ class SparkBurst {
   final MotionSpec spec;
   final List<double> _angles = [];
   final List<double> _reach = [];
+  final List<double> _grow = [];
 
   double get endMs => startMs + spec.sparkMs;
 
@@ -199,7 +217,16 @@ class SparkBurst {
             center.y + math.sin(_angles[i]) * dist * _reach[i],
           ),
           opacity: 1 - u,
-          size: spec.sparkSize * (1 - 0.5 * u),
+          size: spec.sparkSize * _grow[i] * (1 - 0.5 * u),
+          angle: _angles[i],
+          // Streaks only on every other spark; the tail never reaches back
+          // past the centre of the burst.
+          tail: i.isEven
+              ? math.min(
+                  spec.sparkTail * (1 - u) * _reach[i],
+                  dist * _reach[i],
+                )
+              : 0,
         ),
     ];
   }
@@ -375,18 +402,25 @@ double dieShakeOffset(double tMs, double startMs, MotionSpec spec) {
 
 /// Look of a toast pill [startMs]..`+toastMs`: fades in and out over
 /// [MotionSpec.toastFadeMs] and pops in slightly (reduced motion: fade only).
+///
+/// A [big] toast (a notice with a one-line reason) lives
+/// [MotionSpec.toastBigMs] and pops in from a smaller size.
 ({double opacity, double scale}) toastLook(
   double tMs,
   double startMs,
-  MotionSpec spec,
-) {
+  MotionSpec spec, {
+  bool big = false,
+}) {
+  final life = big ? spec.toastBigMs : spec.toastMs;
   final t = tMs - startMs;
-  if (t < 0 || t >= spec.toastMs) {
+  if (t < 0 || t >= life) {
     return (opacity: 0, scale: 1);
   }
   final fadeIn = clamp01(t / spec.toastFadeMs);
-  final fadeOut = clamp01((spec.toastMs - t) / spec.toastFadeMs);
-  final scale = spec.reducedMotion ? 1.0 : 0.85 + 0.15 * easeOutBack(fadeIn);
+  final fadeOut = clamp01((life - t) / spec.toastFadeMs);
+  final from = big ? 0.7 : 0.85;
+  final scale =
+      spec.reducedMotion ? 1.0 : from + (1 - from) * easeOutBack(fadeIn);
   return (opacity: math.min(fadeIn, fadeOut), scale: scale);
 }
 

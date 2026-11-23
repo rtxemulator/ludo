@@ -72,10 +72,11 @@ void main() {
   group('SparkBurst', () {
     final burst = SparkBurst(center: const Pt(7.5, 7.5), startMs: 100, seed: 9);
 
-    test('8 sparks, none outside the lifetime', () {
+    test('14 sparks, none outside the lifetime', () {
       expect(burst.sample(99), isEmpty);
       expect(burst.sample(burst.endMs), isEmpty);
-      expect(burst.sample(200).length, 8);
+      expect(burst.sample(200).length, spec.sparkCount);
+      expect(spec.sparkCount, 14);
     });
 
     test('they fly radially, never beyond 0.9 cell, and fade', () {
@@ -151,11 +152,11 @@ void main() {
         ConfettiBurst(origin: const Pt(7.5, 7.5), startMs: 0, seed: 5);
 
     test('at most 40 particles in all, with one spark burst', () {
-      expect(burst.count, 32);
+      expect(burst.count, 26);
       expect(
           burst.count + spec.sparkCount, lessThanOrEqualTo(spec.maxParticles));
       for (var t = 0.0; t < burst.endMs; t += 100) {
-        expect(burst.sample(t).length, lessThanOrEqualTo(32));
+        expect(burst.sample(t).length, lessThanOrEqualTo(26));
       }
     });
 

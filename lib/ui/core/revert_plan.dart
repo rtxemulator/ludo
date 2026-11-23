@@ -1,8 +1,13 @@
-/// The banked-rolls "dead end" on the board: every token the turn moved (or
-/// captured) glides back to where it was when the turn began. The engine has
-/// already reverted the state; this only *presents* the difference between
-/// the state before the last roll and the state after it. Pure Dart.
+/// The banked-rolls "dead end" on the board: every token the turn moved
+/// rewinds to where it was when the turn began, sliding back along the very
+/// squares it had crossed (a token that left its yard goes back to the start
+/// square and on into the yard; a captured token flies back to where it
+/// stood). The engine has already reverted the state; this only *presents*
+/// the difference between the state before the last roll and the state
+/// after it. Pure Dart.
 library;
+
+import 'dart:math' as math;
 
 import 'package:ludo/engine/ludo_engine.dart';
 
@@ -10,6 +15,7 @@ import 'board_geometry.dart';
 import 'fx.dart';
 import 'fx_scene.dart';
 import 'motion_spec.dart';
+import 'pt.dart';
 import 'token_timeline.dart';
 
 /// One token that goes back.
@@ -60,11 +66,30 @@ class RevertAnimation {
         }
         final delay = n * spec.revertStaggerMs;
         n++;
-        final timeline = TokenTimeline.glide(
-          from: restBefore[seat][i],
-          to: restAfter[seat][i],
-          spec: spec,
-        );
+        final here = before.tokens[seat][i];
+        final back = after.tokens[seat][i];
+        final TokenTimeline timeline;
+        if (here != yardPosition && back < here) {
+          // Walked forward this turn: slide back over the same squares.
+          final path = <Pt>[restBefore[seat][i]];
+          for (var p = here - 1; p > math.max(back, 0); p--) {
+            path.add(geometry.cellCenter(seat, p, i));
+          }
+          if (back == yardPosition && here > 0) {
+            // Back to the start square first, then on into the yard.
+            path.add(geometry.cellCenter(seat, 0, i));
+          }
+          path.add(restAfter[seat][i]);
+          timeline = TokenTimeline.rewind(path: path, spec: spec);
+        } else {
+          // A captured token comes back from its yard: the flight home in
+          // reverse.
+          timeline = TokenTimeline.glide(
+            from: restBefore[seat][i],
+            to: restAfter[seat][i],
+            spec: spec,
+          );
+        }
         tokens.add(
           RevertedToken(
             seat: seat,

@@ -14,11 +14,13 @@ class MotionSpec {
     this.pressScale = 0.86,
     this.liftScaleGain = 0.5,
     this.captureShakeMs = 220,
-    this.shakeAmplitude = 0.12,
+    this.shakeAmplitude = 0.08,
     this.shakeCycles = 5,
     this.shakeDecay = 5,
     this.captureReturnMs = 420,
     this.captureReturnArc = 1.2,
+    this.captureBow = 0.2,
+    this.captureBowMax = 1.2,
     this.finishScaleMs = 260,
     this.finishScale = 0.55,
     this.ringMs = 420,
@@ -38,13 +40,14 @@ class MotionSpec {
     this.shockwaveStartRadius = 0.4,
     this.shockwaveEndRadius = 1.2,
     this.shockwaveOpacity = 0.8,
-    this.sparkCount = 8,
-    this.sparkDistance = 0.9,
-    this.sparkMs = 450,
-    this.sparkSize = 0.09,
+    this.sparkCount = 14,
+    this.sparkDistance = 1.2,
+    this.sparkMs = 520,
+    this.sparkSize = 0.085,
+    this.sparkTail = 0.22,
     this.pocketGlowMs = 500,
     this.coinFlipTurns = 1.5,
-    this.confettiCount = 32,
+    this.confettiCount = 26,
     this.maxParticles = 40,
     this.movableLift = 0.24,
     this.confettiMs = 3200,
@@ -80,10 +83,15 @@ class MotionSpec {
     this.dieShakeDecay = 3,
     this.toastMs = 1200,
     this.toastFadeMs = 180,
+    this.toastBigMs = 2200,
     this.rankBadgeMs = 450,
     this.revertMs = 380,
     this.revertArc = 0.5,
     this.revertStaggerMs = 40,
+    this.rewindStepMs = 60,
+    this.rewindMinMs = 300,
+    this.rewindMaxMs = 900,
+    this.rewindLift = 0.14,
     this.dice3d = const Dice3dSpec(),
     this.tray = const TraySpec(),
   });
@@ -122,6 +130,12 @@ class MotionSpec {
   final double captureReturnMs;
   final double captureReturnArc;
 
+  /// The flight home of a captured token bows sideways (away from the
+  /// board centre) by [captureBow] of its length, at most [captureBowMax]
+  /// cells, so it flies along an arc and not along a ruler.
+  final double captureBow;
+  final double captureBowMax;
+
   final double finishScaleMs;
   final double finishScale;
   final double ringMs;
@@ -147,6 +161,9 @@ class MotionSpec {
   final double sparkDistance;
   final double sparkMs;
   final double sparkSize;
+
+  /// Length (cells) of the streak a home spark leaves behind it.
+  final double sparkTail;
   final double pocketGlowMs;
 
   /// Full turns of the captured token's coin flip.
@@ -219,6 +236,10 @@ class MotionSpec {
   final double toastMs;
   final double toastFadeMs;
 
+  /// Life of a big toast (a notice with a one-line reason, such as
+  /// "Turn undone"); it fades like a small one.
+  final double toastBigMs;
+
   /// Game-over rank badge pop-in.
   final double rankBadgeMs;
 
@@ -228,6 +249,14 @@ class MotionSpec {
   final double revertMs;
   final double revertArc;
   final double revertStaggerMs;
+
+  /// The rewind of a dead end: a token slides back along its own path at
+  /// one step per [rewindStepMs], but never faster than [rewindMinMs] or
+  /// slower than [rewindMaxMs] in all; [rewindLift] is its (scale) height.
+  final double rewindStepMs;
+  final double rewindMinMs;
+  final double rewindMaxMs;
+  final double rewindLift;
 
   /// Numbers of the 3D dice roll.
   final Dice3dSpec dice3d;
@@ -262,6 +291,8 @@ class MotionSpec {
       shakeDecay: shakeDecay,
       captureReturnMs: captureReturnMs / factor,
       captureReturnArc: captureReturnArc,
+      captureBow: captureBow,
+      captureBowMax: captureBowMax,
       finishScaleMs: finishScaleMs / factor,
       finishScale: finishScale,
       ringMs: ringMs / factor,
@@ -285,6 +316,7 @@ class MotionSpec {
       sparkDistance: sparkDistance,
       sparkMs: sparkMs / factor,
       sparkSize: sparkSize,
+      sparkTail: sparkTail,
       pocketGlowMs: pocketGlowMs / factor,
       coinFlipTurns: coinFlipTurns,
       confettiCount: confettiCount,
@@ -323,10 +355,15 @@ class MotionSpec {
       dieShakeDecay: dieShakeDecay,
       toastMs: toastMs / factor,
       toastFadeMs: toastFadeMs / factor,
+      toastBigMs: toastBigMs / factor,
       rankBadgeMs: rankBadgeMs / factor,
       revertMs: revertMs / factor,
       revertArc: revertArc,
       revertStaggerMs: revertStaggerMs / factor,
+      rewindStepMs: rewindStepMs / factor,
+      rewindMinMs: rewindMinMs / factor,
+      rewindMaxMs: rewindMaxMs / factor,
+      rewindLift: rewindLift,
       dice3d: dice3d.scaled(factor),
       tray: tray.scaled(factor),
     );

@@ -176,7 +176,7 @@ void main() {
       );
     });
 
-    test('reaching home: 8 sparks and a pocket glow, no dust', () {
+    test('reaching home: 14 sparks and a pocket glow, no dust', () {
       final plan = planFor(
         makeState(tokens: {
           0: [54, -1, -1, -1],
@@ -188,7 +188,7 @@ void main() {
       expect(plan.effects.rings, isEmpty);
       final sparks = plan.effects.sparks.single.burst;
       expect(sparks.startMs, 400 + plan.mover.impactMs);
-      expect(sparks.sample(sparks.startMs + 100), hasLength(8));
+      expect(sparks.sample(sparks.startMs + 100), hasLength(14));
       final glow = plan.effects.glows.single;
       expect(
           glow.sample(glow.startMs + spec.pocketGlowMs / 2), closeTo(1, 1e-9));
@@ -238,7 +238,7 @@ void main() {
         spec,
       );
       expect(scene.isEmpty, isFalse);
-      expect(scene.particleCount, 8);
+      expect(scene.particleCount, 14);
       expect(scene.nudgeOf(1, 2, 40, spec), isNot(0));
       expect(scene.nudgeOf(1, 3, 40, spec), 0);
       scene.prune(10000, spec);

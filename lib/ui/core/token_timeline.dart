@@ -39,6 +39,45 @@ class TokenPose {
 double _heightScale(MotionSpec spec, double lift) =>
     1 + spec.liftScaleGain * lift;
 
+/// The middle of the board: a captured token bows away from it.
+const Pt _boardCentre = Pt(7.5, 7.5);
+
+/// Sideways offset (cells) of the middle of a captured token's flight from
+/// [square] to [yard]: perpendicular to the flight, on the side away from
+/// the board centre, [MotionSpec.captureBow] of its length (at most
+/// [MotionSpec.captureBowMax]). Zero for a flight of no length.
+Pt _bowOffset(Pt square, Pt yard, MotionSpec spec) {
+  final dx = yard.x - square.x;
+  final dy = yard.y - square.y;
+  final length = math.sqrt(dx * dx + dy * dy);
+  if (length < 1e-9) {
+    return Pt.zero;
+  }
+  final nx = -dy / length;
+  final ny = dx / length;
+  final mx = (square.x + yard.x) / 2 - _boardCentre.x;
+  final my = (square.y + yard.y) / 2 - _boardCentre.y;
+  final side = nx * mx + ny * my >= 0 ? 1.0 : -1.0;
+  final amount = math.min(spec.captureBowMax, length * spec.captureBow);
+  return Pt(nx * amount * side, ny * amount * side);
+}
+
+/// The point [distance] along the polyline [path] whose running lengths are
+/// [cumulative] (clamped to both ends).
+Pt _along(List<Pt> path, List<double> cumulative, double distance) {
+  if (distance <= 0) {
+    return path.first;
+  }
+  for (var i = 0; i + 1 < path.length; i++) {
+    if (distance <= cumulative[i + 1]) {
+      final span = cumulative[i + 1] - cumulative[i];
+      final u = span <= 0 ? 1.0 : (distance - cumulative[i]) / span;
+      return Pt.lerp(path[i], path[i + 1], u);
+    }
+  }
+  return path.last;
+}
+
 /// A token animation: [sample] is pure, so it can be queried at any time in
 /// any order.
 class TokenTimeline {
@@ -102,6 +141,7 @@ class TokenTimeline {
       return TokenTimeline.jump(from: square, to: yard, spec: spec);
     }
     final flightEnd = spec.captureShakeMs + spec.captureReturnMs;
+    final bow = _bowOffset(square, yard, spec);
     TokenPose sample(double t) {
       if (t < spec.captureShakeMs) {
         final u = t / spec.captureShakeMs;
@@ -112,8 +152,12 @@ class TokenTimeline {
       if (t < flightEnd) {
         final u = (t - spec.captureShakeMs) / spec.captureReturnMs;
         final lift = arc(u, spec.captureReturnArc);
+        // The ground path is an arc: the straight line plus a sideways bow
+        // that is 0 at both ends and `bow` in the middle.
+        final side = math.sin(math.pi * clamp01(u));
+        final line = Pt.lerp(square, yard, easeInOutCubic(u));
         return TokenPose(
-          pos: Pt.lerp(square, yard, easeInOutCubic(u)),
+          pos: Pt(line.x + bow.x * side, line.y + bow.y * side),
           lift: lift,
           scale: _heightScale(spec, lift),
           // Never exactly 0: a zero-width disc is a singular matrix.
@@ -130,6 +174,51 @@ class TokenTimeline {
     }
 
     return TokenTimeline._(flightEnd + spec.landSquashMs, 0, sample);
+  }
+
+  /// A rewind: the token slides back along [path] (`path.first` = where it
+  /// is, `path.last` = where the turn began; every point in between is a
+  /// square of its own path, walked in reverse). One ease in and out over
+  /// the whole length (one step per [MotionSpec.rewindStepMs], clamped to
+  /// [MotionSpec.rewindMinMs] .. [MotionSpec.rewindMaxMs] in all), a small
+  /// rise ([MotionSpec.rewindLift], height = scale) and the usual landing
+  /// press. Reduced motion cross-fades like [TokenTimeline.jump].
+  factory TokenTimeline.rewind({
+    required List<Pt> path,
+    MotionSpec spec = MotionSpec.standard,
+  }) {
+    assert(path.length >= 2, 'a rewind needs a start and an end');
+    if (spec.reducedMotion) {
+      return TokenTimeline.jump(from: path.first, to: path.last, spec: spec);
+    }
+    final cumulative = <double>[0];
+    for (var i = 0; i + 1 < path.length; i++) {
+      cumulative.add(cumulative.last + path[i].distanceTo(path[i + 1]));
+    }
+    final length = cumulative.last;
+    final slide = ((path.length - 1) * spec.rewindStepMs)
+        .clamp(spec.rewindMinMs, spec.rewindMaxMs)
+        .toDouble();
+
+    TokenPose sample(double t) {
+      if (t < slide) {
+        final u = t / slide;
+        final lift = spec.rewindLift * math.sin(math.pi * clamp01(u));
+        return TokenPose(
+          pos: _along(path, cumulative, length * easeInOutCubic(u)),
+          lift: lift,
+          scale: _heightScale(spec, lift),
+        );
+      }
+      final u = (t - slide) / spec.landSquashMs;
+      final bump = math.sin(math.pi * clamp01(u));
+      return TokenPose(
+        pos: path.last,
+        scale: 1 - (1 - spec.pressScale) * bump,
+      );
+    }
+
+    return TokenTimeline._(slide + spec.landSquashMs, slide, sample);
   }
 
   /// Reduced-motion move: fade out at [from], fade in at [to].

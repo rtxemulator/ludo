@@ -105,9 +105,11 @@ void main() {
         startMs: 1000,
       );
       expect(plan.effects.rings, hasLength(2));
-      for (final r in plan.effects.rings) {
-        expect(r.ring.startMs, greaterThanOrEqualTo(1000 + _spec.revertMs));
-      }
+      // The mover rewinds 4 squares (the 300 ms minimum), the victim flies
+      // back in one 380 ms glide, 40 ms later.
+      final starts = [for (final r in plan.effects.rings) r.ring.startMs];
+      expect(starts[0], 1000 + _spec.rewindMinMs);
+      expect(starts[1], 1000 + _spec.revertStaggerMs + _spec.revertMs);
     });
 
     test('nothing differs: an empty plan that ends at once', () {

@@ -247,6 +247,9 @@ void main() {
       expect(g.lastRoll, isNot(6));
       expect(g.message, 'Turn undone');
       expect(g.toasts[0]!.text, 'Turn undone');
+      expect(g.toasts[0]!.big, isTrue);
+      expect(g.toasts[0]!.detail, DockToast.undoneReason);
+      expect(g.toasts[0]!.detail, isNot(contains('\n')));
       expect(g.revert, isNull);
       expect(g.phase, GamePhase.awaitingRoll);
       expect(g.activeSeat, 1);

@@ -81,15 +81,24 @@ class OverlayPainter extends CustomPainter {
       if (toast == null) {
         continue;
       }
-      final look = toastLook(now, toast.startMs, game.spec);
+      final big = toast.big;
+      final look = toastLook(now, toast.startMs, game.spec, big: big);
       if (look.opacity <= 0.01) {
         continue;
       }
       final dock = layout.docks[seat];
-      final label = _label(toast.text, cell * 0.42, const Color(0xFFFFFFFF));
-      final w = label.width + cell * 0.7;
-      final h = cell * 0.8;
-      final at = _dockPoint(dock, 0, cell * 1.35);
+      final label = _label(
+        toast.text,
+        cell * (big ? 0.6 : 0.42),
+        const Color(0xFFFFFFFF),
+      );
+      final reason = toast.detail == null
+          ? null
+          : _label(toast.detail!, cell * 0.32, const Color(0xCCFFFFFF));
+      final w =
+          math.max(label.width, reason?.width ?? 0) + cell * (big ? 1.1 : 0.7);
+      final h = cell * (big ? (reason == null ? 1.1 : 1.6) : 0.8);
+      final at = _dockPoint(dock, 0, cell * (big ? 1.5 : 1.35));
       canvas.save();
       canvas.translate(at.dx, at.dy);
       canvas.rotate(seatTextTurns(layout, seat, orientation) * math.pi / 2);
@@ -100,18 +109,24 @@ class OverlayPainter extends CustomPainter {
         Paint()..color = Color.fromRGBO(0, 0, 0, look.opacity),
       );
       _fill.color = const Color(0xE6202024);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(box, Radius.circular(h / 2)),
-        _fill,
-      );
+      final radius = Radius.circular(big ? h * 0.3 : h / 2);
+      canvas.drawRRect(RRect.fromRectAndRadius(box, radius), _fill);
       _stroke
-        ..strokeWidth = math.max(1.5, cell * 0.05)
+        ..strokeWidth = math.max(1.5, cell * (big ? 0.07 : 0.05))
         ..color = palette.seatLight(seat);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(box, Radius.circular(h / 2)),
-        _stroke,
-      );
-      label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
+      canvas.drawRRect(RRect.fromRectAndRadius(box, radius), _stroke);
+      if (reason == null) {
+        label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
+      } else {
+        // Title above, one-line reason below, centred as a pair.
+        final gap = cell * 0.12;
+        final top = -(label.height + gap + reason.height) / 2;
+        label.paint(canvas, Offset(-label.width / 2, top));
+        reason.paint(
+          canvas,
+          Offset(-reason.width / 2, top + label.height + gap),
+        );
+      }
       canvas.restore();
       canvas.restore();
     }

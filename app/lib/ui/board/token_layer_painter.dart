@@ -96,6 +96,9 @@ class TokenLayerPainter extends CustomPainter {
   final Paint _glow = Paint();
   final Paint _ring = Paint()..style = PaintingStyle.stroke;
   final Paint _spark = Paint();
+  final Paint _streak = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -526,8 +529,25 @@ class TokenLayerPainter extends CustomPainter {
         0.5,
       )!;
       for (final sp in sparks) {
-        _spark.color = base.withAlpha((sp.opacity * 255).round().clamp(0, 255));
-        canvas.drawCircle(Offset(sp.pos.x, sp.pos.y), sp.size, _spark);
+        final alpha = (sp.opacity * 255).round().clamp(0, 255);
+        final at = Offset(sp.pos.x, sp.pos.y);
+        if (sp.tail > 0.01) {
+          // A streak: a round-capped line from the spark back toward the
+          // burst centre, as wide as the spark.
+          _streak
+            ..strokeWidth = sp.size * 2
+            ..color = base.withAlpha(alpha ~/ 2);
+          canvas.drawLine(
+            at,
+            Offset(
+              at.dx - math.cos(sp.angle) * sp.tail,
+              at.dy - math.sin(sp.angle) * sp.tail,
+            ),
+            _streak,
+          );
+        }
+        _spark.color = base.withAlpha(alpha);
+        canvas.drawCircle(at, sp.size, _spark);
       }
     }
   }

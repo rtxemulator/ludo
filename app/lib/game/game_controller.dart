@@ -30,11 +30,25 @@ enum GamePhase { awaitingRoll, rolling, awaitingMove, moving, gameOver }
 
 /// A short notice at a seat's dock ("No move"); the overlay paints it facing
 /// that seat.
+///
+/// A [big] toast is the larger kind for a notice that needs a reason:
+/// [text] is its title and [detail] a one-line reason under it.
 class DockToast {
-  const DockToast(this.text, this.startMs);
+  const DockToast(this.text, this.startMs, {this.detail, this.big = false});
+
+  /// The one-line reason shown under "Turn undone".
+  static const String undoneReason = 'Not every die could be played';
+
+  /// The "Turn undone" notice, big, with its reason.
+  const DockToast.undone(this.startMs)
+      : text = 'Turn undone',
+        detail = undoneReason,
+        big = true;
 
   final String text;
   final double startMs;
+  final String? detail;
+  final bool big;
 }
 
 /// Game flow on top of the engine, for the seats of a [MatchSetup].
@@ -1128,7 +1142,7 @@ class GameController extends ChangeNotifier {
         tray.exitAll(seat, ChipExit.revert, now, delayMs: delay);
         message = 'Turn undone';
         _ai.cancel();
-        toasts[seat] = DockToast(message!, now);
+        toasts[seat] = DockToast.undone(now);
         feedback.play(HapticEvent.noMove);
         final anim = RevertAnimation.plan(
           before: before,
@@ -1341,7 +1355,7 @@ class GameController extends ChangeNotifier {
     replaySettle();
     final now = _clock();
     if (reverted) {
-      toasts[state.currentSeat] = DockToast('Turn undone', now);
+      toasts[state.currentSeat] = DockToast.undone(now);
     }
     state = ready;
     _activate(ready.currentSeat);

@@ -163,8 +163,8 @@ Packed colours are opaque; `seat` is Red, Green, Yellow, Blue.
 | yardInner | `#FFFFFF` | `#2B2B31` |
 | text | `#22201C` | `#EDEDED` |
 | seat Red | `#E53935` | `#E53935` |
-| seat Green | `#43A047` | `#43A047` |
-| seat Yellow | `#FDD835` | `#FDD835` |
+| seat Green | `#48A84C` (was `#43A047`; polish pass 1) | `#48A84C` |
+| seat Yellow | `#FFCB2B` (was `#FDD835`; polish pass 1) | `#FFCB2B` |
 | seat Blue | `#1E88E5` | `#1E88E5` |
 | feltCentre | `#E9E2D3` | `#2A2D30` |
 | feltEdge | `#CDC3AE` | `#111214` |
@@ -243,6 +243,7 @@ The soft lines and the light yellow of Classic and Slate are why High Contrast e
 | `orientation` | `settings.orientation` | enum name | `table` (existing) |
 | `autoRotateShared` | `settings.autoRotateShared` | bool | `true` (existing) |
 | `frameOverlay` | `settings.frameOverlay` | bool | `false` (existing) |
+| `atmosphere` | `settings.atmosphere` | bool | `true` (polish pass 1, step 8) |
 | `sfxEnabled` | `settings.sfxEnabled` | bool | `true` |
 | `sfxVolume` | `settings.sfxVolume` | double `0..1` | `0.8` |
 | `musicEnabled` | `settings.musicEnabled` | bool | `false` |

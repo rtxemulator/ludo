@@ -60,13 +60,21 @@ android {
         }
     }
 
+    // The Flutter plugin creates the "profile" build type (initWith release)
+    // before this block runs, so it does not inherit the signing config set
+    // below. Assign it explicitly to both.
+    val activeSigning = if (hasReleaseSigning) {
+        signingConfigs.getByName("release")
+    } else {
+        signingConfigs.getByName("debug")
+    }
+
     buildTypes {
         release {
-            signingConfig = if (hasReleaseSigning) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = activeSigning
+        }
+        getByName("profile") {
+            signingConfig = activeSigning
         }
     }
 }

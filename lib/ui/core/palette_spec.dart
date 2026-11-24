@@ -61,8 +61,8 @@ class PaletteSpec {
 
   static const List<int> _classicSeats = [
     0xFFE53935,
-    0xFF43A047,
-    0xFFFDD835,
+    0xFF48A84C,
+    0xFFFFCB2B,
     0xFF1E88E5,
   ];
 

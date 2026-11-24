@@ -144,10 +144,15 @@ void main() {
       );
     });
 
-    test('Classic keeps the colours of the look before Milestone 6', () {
+    test('Classic keeps its look, with a warmer yellow and a lifted green', () {
       const light = PaletteSpec.classicLight;
       expect(light.background, 0xFFF3F1EC);
-      expect(light.seat, [0xFFE53935, 0xFF43A047, 0xFFFDD835, 0xFF1E88E5]);
+      // Red and blue are the look before Milestone 6; polish pass 1 warmed
+      // the yellow (FDD835 -> FFCB2B) and lifted the green (43A047 -> 48A84C),
+      // in Classic only.
+      expect(light.seat, [0xFFE53935, 0xFF48A84C, 0xFFFFCB2B, 0xFF1E88E5]);
+      expect(PaletteSpec.slateLight.seat, isNot(contains(0xFFFFCB2B)));
+      expect(PaletteSpec.highContrastLight.seat, isNot(contains(0xFF48A84C)));
       expect(PaletteSpec.classicDark.board, 0xFF1E1E22);
       expect(PaletteSpec.classicDark.seat, light.seat);
     });

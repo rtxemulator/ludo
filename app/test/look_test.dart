@@ -114,7 +114,8 @@ void main() {
       );
       expect(LudoPalette.light.background, const Color(0xFFF3F1EC));
       expect(LudoPalette.dark.board, const Color(0xFF1E1E22));
-      expect(LudoPalette.light.seat[2], const Color(0xFFFDD835));
+      expect(LudoPalette.light.seat[2], const Color(0xFFFFCB2B));
+      expect(LudoPalette.light.seat[1], const Color(0xFF48A84C));
     });
 
     test('the six palettes are six different instances', () {

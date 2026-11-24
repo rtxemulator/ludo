@@ -46,7 +46,7 @@ void main() {
 
     testWidgets('shows the settings rows under an app bar', (tester) async {
       // Tall enough for every row to be built (the list is lazy).
-      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.physicalSize = const Size(800, 1800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
@@ -62,10 +62,28 @@ void main() {
         'Auto-rotate menu to active seat',
         'Sound effects',
         'Music',
+        'Table atmosphere',
         'Frame timing overlay',
       ]) {
         expect(find.text(row), findsOneWidget, reason: row);
       }
+    });
+
+    testWidgets('the atmosphere switch changes the model', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final settings = GameSettings();
+      await tester.pumpWidget(
+        MaterialApp(home: SettingsScreen(settings: settings)),
+      );
+      expect(settings.atmosphere, isTrue);
+      await tester.tap(find.byKey(const ValueKey('atmosphere')));
+      await tester.pump();
+      expect(settings.atmosphere, isFalse);
+      await tester.tap(find.byKey(const ValueKey('atmosphere')));
+      await tester.pump();
+      expect(settings.atmosphere, isTrue);
     });
 
     testWidgets('rows change the model', (tester) async {

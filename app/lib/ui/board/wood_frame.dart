@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
+import 'package:ludo/ui/core/atmosphere.dart';
 import 'package:ludo/ui/core/seeded.dart';
 import 'package:ludo/ui/core/table_layout.dart';
 
@@ -15,7 +16,11 @@ const double boardCornerRadius = 0.4;
 /// top-left bias), grain strokes along each side, mitred corners and one dark
 /// outer plus one light inner hairline. It is meant to be baked into the
 /// cached static layer; nothing here runs per frame.
-void paintWoodFrame(Canvas canvas, LudoPalette palette) {
+///
+/// [sheen] (`0` off .. `1` full) adds a satin ridge of light along the middle
+/// of each side, fading out toward the corners; symmetric, so no side is lit
+/// more than another.
+void paintWoodFrame(Canvas canvas, LudoPalette palette, {double sheen = 0}) {
   const f = TableLayout.frameCells;
   const w = TableLayout.framedCells;
   const square = Rect.fromLTWH(0, 0, w, w);
@@ -81,6 +86,9 @@ void paintWoodFrame(Canvas canvas, LudoPalette palette) {
         grain,
       );
     }
+    if (sheen > 0) {
+      _paintSheen(canvas, palette, sheen);
+    }
     canvas.restore();
   }
 
@@ -109,5 +117,41 @@ void paintWoodFrame(Canvas canvas, LudoPalette palette) {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.03
       ..color = palette.woodGrainLight.withAlpha(150),
+  );
+}
+
+/// One ridge of satin light along the middle of the top band (the caller has
+/// rotated the canvas to it), plus a thinner, fainter companion line. The
+/// light is the palette's light wood lifted toward white.
+void _paintSheen(Canvas canvas, LudoPalette palette, double strength) {
+  const f = TableLayout.frameCells;
+  const w = TableLayout.framedCells;
+  final lit = Color.lerp(
+    palette.woodGrainLight,
+    const Color(0xFFFFFFFF),
+    Atmosphere.sheenWhite,
+  )!;
+  Paint ridge(double width, int alpha) {
+    final base = lit.withAlpha(Atmosphere.alpha(alpha, strength));
+    return Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = width
+      ..shader = LinearGradient(
+        colors: [base.withAlpha(0), base, base, base.withAlpha(0)],
+        stops: Atmosphere.sheenStops,
+      ).createShader(const Rect.fromLTWH(0, 0, w, f));
+  }
+
+  canvas.drawLine(
+    const Offset(f, f * 0.42),
+    const Offset(w - f, f * 0.42),
+    ridge(f * Atmosphere.sheenWidth, Atmosphere.sheenAlpha),
+  );
+  // The companion: thinner and half as strong.
+  canvas.drawLine(
+    const Offset(f, f * 0.7),
+    const Offset(w - f, f * 0.7),
+    ridge(f * Atmosphere.sheenWidth * 0.35, Atmosphere.sheenAlpha ~/ 2),
   );
 }

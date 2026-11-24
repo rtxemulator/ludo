@@ -1,5 +1,8 @@
 import 'dart:math' as math;
+import 'dart:ui';
+
 import 'package:flutter/rendering.dart';
+import 'package:ludo/ui/core/atmosphere.dart';
 import 'package:ludo/ui/core/board_geometry.dart';
 import 'package:ludo/ui/core/board_polish.dart';
 import 'package:ludo/ui/core/pt.dart';
@@ -20,10 +23,15 @@ import 'wood_frame.dart';
 /// no lit corner); start squares and home columns carry chevrons toward the
 /// centre; the yard's inner panel is recessed. All colours come from the
 /// active [LudoPalette].
+///
+/// [atmosphere] (`0` off .. `1` full, see `Atmosphere`) adds paper grain and a
+/// vignette over the board and a satin sheen along the frame; it is baked
+/// into the same cached layer, so it costs nothing during play.
 class BoardPainter extends CustomPainter {
-  BoardPainter(this.palette);
+  BoardPainter(this.palette, {this.atmosphere = 0});
 
   final LudoPalette palette;
+  final double atmosphere;
 
   static const BoardGeometry _geo = BoardGeometry();
 
@@ -37,7 +45,7 @@ class BoardPainter extends CustomPainter {
     final cellPx = size.width / TableLayout.framedCells;
     canvas.save();
     canvas.scale(cellPx);
-    paintWoodFrame(canvas, palette);
+    paintWoodFrame(canvas, palette, sheen: atmosphere);
     canvas.translate(TableLayout.frameCells, TableLayout.frameCells);
     _paintBoard(canvas, BoardPolish.cellGap(cellPx));
     canvas.restore();
@@ -194,7 +202,63 @@ class BoardPainter extends CustomPainter {
       canvas.drawPath(path, line);
     }
 
+    if (atmosphere > 0) {
+      _paperAtmosphere(canvas);
+    }
     canvas.restore();
+  }
+
+  /// Vignette (the corners of the board a little darker) and paper grain
+  /// (two sets of fine dots), over everything else on the board. The inks
+  /// are the palette's wood tones.
+  void _paperAtmosphere(Canvas canvas) {
+    const rect = Rect.fromLTWH(0, 0, 15, 15);
+    final ink = palette.woodGrainDark;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          radius: Atmosphere.boardVignetteRadius,
+          colors: [
+            ink.withAlpha(0),
+            ink.withAlpha(
+              Atmosphere.alpha(Atmosphere.boardVignetteAlpha, atmosphere),
+            ),
+          ],
+          stops: const [Atmosphere.boardVignetteStart, 1.0],
+        ).createShader(rect),
+    );
+    final dot = Paint()
+      ..strokeWidth = Atmosphere.boardGrainSize
+      ..strokeCap = StrokeCap.round;
+    final dark = Atmosphere.grainPoints(
+      seed: 0x9A9E,
+      count: Atmosphere.boardGrainDots,
+      width: 15,
+      height: 15,
+    );
+    final light = Atmosphere.grainPoints(
+      seed: 0x11D0,
+      count: Atmosphere.boardGrainDots,
+      width: 15,
+      height: 15,
+    );
+    canvas.drawPoints(
+      PointMode.points,
+      [for (final p in dark) _o(p)],
+      dot
+        ..color = ink.withAlpha(
+          Atmosphere.alpha(Atmosphere.boardGrainDarkAlpha, atmosphere),
+        ),
+    );
+    canvas.drawPoints(
+      PointMode.points,
+      [for (final p in light) _o(p)],
+      dot
+        ..color = palette.woodGrainLight.withAlpha(
+          Atmosphere.alpha(Atmosphere.boardGrainLightAlpha, atmosphere),
+        ),
+    );
   }
 
   static Path _star(Offset c, double outer, double inner) {
@@ -215,5 +279,5 @@ class BoardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(BoardPainter oldDelegate) =>
-      oldDelegate.palette != palette;
+      oldDelegate.palette != palette || oldDelegate.atmosphere != atmosphere;
 }

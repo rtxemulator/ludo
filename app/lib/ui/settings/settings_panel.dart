@@ -149,6 +149,13 @@ class SettingsPanel extends StatelessWidget {
               ),
             ),
             SwitchListTile(
+              key: const ValueKey('atmosphere'),
+              title: const Text('Table atmosphere'),
+              subtitle: const Text('paper grain, vignette, wood sheen'),
+              value: s.atmosphere,
+              onChanged: (v) => s.atmosphere = v,
+            ),
+            SwitchListTile(
               title: const Text('Frame timing overlay'),
               subtitle: const Text('fps, dropped frames, paint time'),
               value: s.frameOverlay,

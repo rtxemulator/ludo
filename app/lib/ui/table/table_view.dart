@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ludo/ui/core/atmosphere.dart';
 import 'package:ludo/ui/core/table_layout.dart';
 
 import '../../game/game_controller.dart';
@@ -58,6 +59,9 @@ class TableView extends StatelessWidget {
         final height = constraints.maxHeight - inset.top - inset.bottom;
         final layout = TableLayout.compute(width: width, height: height);
         final frame = boxRect(layout.frame);
+        final atmosphere = settings.atmosphere
+            ? Atmosphere.strengthOf(settings.paletteId)
+            : 0.0;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -67,6 +71,7 @@ class TableView extends StatelessWidget {
                 painter: FeltPainter(
                   palette: palette,
                   frame: frame.shift(Offset(inset.left, inset.top)),
+                  atmosphere: atmosphere,
                 ),
               ),
             ),
@@ -84,7 +89,7 @@ class TableView extends StatelessWidget {
                       child: CustomPaint(
                         isComplex: true,
                         willChange: false,
-                        painter: BoardPainter(palette),
+                        painter: BoardPainter(palette, atmosphere: atmosphere),
                       ),
                     ),
                   ),

@@ -22,6 +22,7 @@ void main() {
     expect(settings.orientation, UiOrientation.table);
     expect(settings.autoRotateShared, isTrue);
     expect(settings.frameOverlay, isFalse);
+    expect(settings.atmosphere, isTrue);
     expect(settings.sfxEnabled, isTrue);
     expect(settings.sfxVolume, 0.8);
     expect(settings.musicEnabled, isFalse);
@@ -41,6 +42,7 @@ void main() {
       orientation: UiOrientation.fixed,
       autoRotateShared: false,
       frameOverlay: true,
+      atmosphere: false,
       sfxEnabled: false,
       sfxVolume: 0.25,
       musicEnabled: true,
@@ -59,6 +61,7 @@ void main() {
     expect(loaded.orientation, UiOrientation.fixed);
     expect(loaded.autoRotateShared, isFalse);
     expect(loaded.frameOverlay, isTrue);
+    expect(loaded.atmosphere, isFalse);
     expect(loaded.sfxEnabled, isFalse);
     expect(loaded.sfxVolume, 0.25);
     expect(loaded.musicEnabled, isTrue);

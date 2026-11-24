@@ -26,6 +26,7 @@ class SettingsStore {
   static const String orientationKey = 'settings.orientation';
   static const String autoRotateKey = 'settings.autoRotateShared';
   static const String frameOverlayKey = 'settings.frameOverlay';
+  static const String atmosphereKey = 'settings.atmosphere';
   static const String sfxEnabledKey = 'settings.sfxEnabled';
   static const String sfxVolumeKey = 'settings.sfxVolume';
   static const String musicEnabledKey = 'settings.musicEnabled';
@@ -46,6 +47,7 @@ class SettingsStore {
           _enum(orientationKey, UiOrientation.values) ?? UiOrientation.table,
       autoRotateShared: _bool(autoRotateKey) ?? true,
       frameOverlay: _bool(frameOverlayKey) ?? false,
+      atmosphere: _bool(atmosphereKey) ?? true,
       sfxEnabled: _bool(sfxEnabledKey) ?? true,
       sfxVolume: _volume(sfxVolumeKey) ?? defaultSfxVolume,
       musicEnabled: _bool(musicEnabledKey) ?? false,
@@ -66,6 +68,7 @@ class SettingsStore {
       await _prefs.setString(orientationKey, settings.orientation.name);
       await _prefs.setBool(autoRotateKey, settings.autoRotateShared);
       await _prefs.setBool(frameOverlayKey, settings.frameOverlay);
+      await _prefs.setBool(atmosphereKey, settings.atmosphere);
       await _prefs.setBool(sfxEnabledKey, settings.sfxEnabled);
       await _prefs.setDouble(sfxVolumeKey, settings.sfxVolume);
       await _prefs.setBool(musicEnabledKey, settings.musicEnabled);

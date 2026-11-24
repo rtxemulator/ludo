@@ -29,6 +29,7 @@ class GameSettings extends ChangeNotifier {
     UiOrientation orientation = UiOrientation.table,
     bool autoRotateShared = true,
     bool frameOverlay = false,
+    bool atmosphere = true,
     bool sfxEnabled = true,
     double sfxVolume = defaultSfxVolume,
     bool musicEnabled = false,
@@ -42,6 +43,7 @@ class GameSettings extends ChangeNotifier {
         _orientation = orientation,
         _autoRotateShared = autoRotateShared,
         _frameOverlay = frameOverlay,
+        _atmosphere = atmosphere,
         _sfxEnabled = sfxEnabled,
         _sfxVolume = _volume(sfxVolume, defaultSfxVolume),
         _musicEnabled = musicEnabled,
@@ -56,6 +58,7 @@ class GameSettings extends ChangeNotifier {
   UiOrientation _orientation;
   bool _autoRotateShared;
   bool _frameOverlay;
+  bool _atmosphere;
   bool _sfxEnabled;
   double _sfxVolume;
   bool _musicEnabled;
@@ -81,6 +84,10 @@ class GameSettings extends ChangeNotifier {
 
   /// Frame-timing overlay (profiling aid).
   bool get frameOverlay => _frameOverlay;
+
+  /// Paper grain, vignette and wood sheen on the table. On by default; off
+  /// gives the plain look (and a cheaper first paint).
+  bool get atmosphere => _atmosphere;
 
   /// Sound effects on or off.
   bool get sfxEnabled => _sfxEnabled;
@@ -115,6 +122,7 @@ class GameSettings extends ChangeNotifier {
   set autoRotateShared(bool v) =>
       _set(_autoRotateShared != v, () => _autoRotateShared = v);
   set frameOverlay(bool v) => _set(_frameOverlay != v, () => _frameOverlay = v);
+  set atmosphere(bool v) => _set(_atmosphere != v, () => _atmosphere = v);
   set sfxEnabled(bool v) => _set(_sfxEnabled != v, () => _sfxEnabled = v);
   set sfxVolume(double v) {
     final c = _volume(v, _sfxVolume);

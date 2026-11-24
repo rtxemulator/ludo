@@ -183,6 +183,16 @@ void main() {
       );
       expect(BoardPainter(classic).shouldRepaint(BoardPainter(slate)), isTrue);
       expect(
+        BoardPainter(classic, atmosphere: 1)
+            .shouldRepaint(BoardPainter(classic, atmosphere: 0)),
+        isTrue,
+      );
+      expect(
+        BoardPainter(classic, atmosphere: 1)
+            .shouldRepaint(BoardPainter(classic, atmosphere: 1)),
+        isFalse,
+      );
+      expect(
         BoardPainter(classic).shouldRepaint(BoardPainter(classicDark)),
         isTrue,
       );
@@ -195,6 +205,12 @@ void main() {
       expect(
         FeltPainter(palette: classic, frame: frame)
             .shouldRepaint(FeltPainter(palette: slate, frame: frame)),
+        isTrue,
+      );
+      expect(
+        FeltPainter(palette: classic, frame: frame, atmosphere: 1)
+            .shouldRepaint(
+                FeltPainter(palette: classic, frame: frame, atmosphere: 0)),
         isTrue,
       );
     });
